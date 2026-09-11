@@ -1,0 +1,15 @@
+FROM php:8.2-cli-alpine
+
+RUN apk add --no-cache postgresql-dev libpq-dev curl bash \
+    && docker-php-ext-install pdo pdo_pgsql
+
+WORKDIR /var/www/html
+
+COPY ./backend /var/www/html
+
+RUN mkdir -p /var/www/html/storage/logs /var/www/html/storage/backups /var/www/html/storage/uploads \
+    && chmod -R 777 /var/www/html/storage
+
+EXPOSE 8000
+
+CMD ["php", "-S", "0.0.0.0:8000", "-t", "public", "public/index.php"]

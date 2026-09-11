@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+*/node_modules/
+vendor/
+*/vendor/
+
+# Build outputs
+dist/
+*/dist/
+build/
+*/build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Logs and cache
+*.log
+backend/storage/logs/*
+!backend/storage/logs/.gitkeep
+.cache/
+.temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
