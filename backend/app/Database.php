@@ -12,6 +12,7 @@ class Database
 
     public static function getConnection(): PDO
     {
+        if (self::$instance === null) {
             $configFile = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
             $config = require $configFile;
             $driver = $config['driver'] ?? 'pgsql';
