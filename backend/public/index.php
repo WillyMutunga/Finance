@@ -694,6 +694,43 @@ try {
         (new WebhookController())->simulateC2B();
     }
 
+    // DB Connection Diagnostic
+    elseif ($uri === '/db-diag') {
+        $configFile = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
+        $config = require $configFile;
+        $candidates = [
+            'socket_tmp' => "pgsql:host=/tmp;port=5432;dbname={$config['database']}",
+            'socket_var_run' => "pgsql:host=/var/run/postgresql;port=5432;dbname={$config['database']}",
+            'socket_var_pgsql' => "pgsql:host=/var/pgsql;port=5432;dbname={$config['database']}",
+            'socket_empty' => "pgsql:dbname={$config['database']}",
+            'tcp_127' => "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']}",
+            'tcp_localhost' => "pgsql:host=localhost;port=5432;dbname={$config['database']}",
+            'tcp_ssl_req' => "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']};sslmode=require",
+        ];
+        $results = [];
+        foreach ($candidates as $name => $dsn) {
+            try {
+                $p = new PDO($dsn, $config['username'], $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                $stmt = $p->query("SELECT count(*) as c FROM users");
+                $r = $stmt->fetch(PDO::FETCH_ASSOC);
+                $results[$name] = ['status' => 'SUCCESS', 'user_count' => $r['c']];
+            } catch (\Throwable $ex) {
+                $results[$name] = ['status' => 'FAIL', 'error' => $ex->getMessage()];
+            }
+        }
+        $sockets = array_merge((array)@glob('/tmp/.s.PGSQL*'), (array)@glob('/var/run/postgresql/.s.PGSQL*'), (array)@glob('/var/pgsql/.s.PGSQL*'));
+        echo json_encode([
+            'results' => $results,
+            'found_sockets' => $sockets,
+            'config' => [
+                'user' => $config['username'],
+                'db' => $config['database'],
+                'driver' => $config['driver']
+            ]
+        ], JSON_PRETTY_PRINT);
+        exit;
+    }
+
     // Health check
     elseif ($uri === '/' || $uri === '/health') {
         echo json_encode([
