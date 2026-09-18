@@ -1,0 +1,70 @@
+name: Deploy Skysoft Finance to HostPinnacle
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build Frontend and Deploy via FTP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 3. Install Frontend Dependencies & Build
+        run: |
+          cd frontend
+          npm ci || npm install
+          npm run build
+
+      - name: 4. Prepare Deployment Package
+        run: |
+          mkdir -p deploy_package/api
+          
+          # Copy Frontend Built Assets to Root of Subdomain
+          cp -r frontend/dist/* deploy_package/
+          
+          # Copy Apache .htaccess for SPA and API routing
+          cp .htaccess deploy_package/
+          
+          # Copy Backend Application to /api
+          cp -r backend/app deploy_package/api/
+          cp -r backend/config deploy_package/api/
+          cp -r backend/database deploy_package/api/
+          cp -r backend/storage deploy_package/api/
+          cp backend/public/index.php deploy_package/api/index.php
+          
+          # If .env.production exists or create a fallback template
+          cat << 'EOF' > deploy_package/api/.env
+          DB_CONNECTION=pgsql
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_DATABASE=skysofts_finance
+          DB_USERNAME=skysofts_Sharks
+          DB_PASSWORD=William#20
+          DB_SSLMODE=prefer
+          APP_ENV=production
+          APP_DEBUG=false
+          APP_SECRET=a8f8b89c02d7e484a86e921b77cd4b9e289f81643c13e51a2d5e317c8d99042b
+          EOF
+
+      - name: 5. Deploy via FTP to HostPinnacle
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy_package/
+          server-dir: ${{ secrets.FTP_SERVER_DIR || 'public_html/finance/' }}
+          dangerous-clean-slate: false
