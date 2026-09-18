@@ -1915,73 +1915,35 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
               </div>
             )}
 
-            {/* Note 19: STOCK / INVENTORY (Screenshot 1) & Official 3-Signature Section */}
-            <div className="mt-8 space-y-6 pt-4 border-t border-slate-200">
-              <div className="space-y-2">
-                <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
-                  19. STOCK/ INVENTORY
-                </h3>
+            {/* Official 3-Signature Approval Section */}
+            <div className="mt-8 space-y-6 pt-4 border-t border-slate-200 pb-6">
+              <p className="text-xs text-slate-800 font-medium">
+                This school&apos;s financial statements were approved on ......................................... and signed by:
+              </p>
 
-                {/* Blue Summary Table */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-xs">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#0284c7] text-white font-bold">
-                      <tr>
-                        <th className="py-2.5 px-4 font-sans text-xs">Description</th>
-                        <th className="py-2.5 px-4 text-right font-sans text-xs">
-                          <div>{financialYear}</div>
-                          <div className="text-[10px] font-normal tracking-wider">KES</div>
-                        </th>
-                        <th className="py-2.5 px-4 text-right font-sans text-xs">
-                          <div>-</div>
-                          <div className="text-[10px] font-normal tracking-wider">KES</div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-mono text-[11px] bg-white">
-                      <tr>
-                        <td className="py-2.5 px-4 font-sans font-bold text-slate-900">Total</td>
-                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">0</td>
-                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">0</td>
-                      </tr>
-                    </tbody>
-                  </table>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+                {/* 1. Chair BOM */}
+                <div className="space-y-1.5">
+                  <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                  <div className="font-bold text-xs text-slate-900">Name:</div>
+                  <div className="font-bold text-xs text-slate-900">Chair BOM</div>
+                  <div className="font-bold text-xs text-slate-900">Date:</div>
                 </div>
-              </div>
 
-              {/* Divider */}
-              <div className="border-b border-slate-300/80 my-6"></div>
+                {/* 2. School Principal / Secretary to BOM */}
+                <div className="space-y-1.5">
+                  <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                  <div className="font-bold text-xs text-slate-900">Name:</div>
+                  <div className="font-bold text-xs text-slate-900">School Principal/ Secretary to BOM</div>
+                  <div className="font-bold text-xs text-slate-900">Date:</div>
+                </div>
 
-              {/* Approval Text & 3-Column Sign-Off */}
-              <div className="space-y-6 pb-6">
-                <p className="text-xs text-slate-800 font-medium">
-                  This school&apos;s financial statements were approved on ......................................... and signed by:
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
-                  {/* 1. Chair BOM */}
-                  <div className="space-y-1.5">
-                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
-                    <div className="font-bold text-xs text-slate-900">Name:</div>
-                    <div className="font-bold text-xs text-slate-900">Chair BOM</div>
-                    <div className="font-bold text-xs text-slate-900">Date:</div>
-                  </div>
-
-                  {/* 2. School Principal / Secretary to BOM */}
-                  <div className="space-y-1.5">
-                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
-                    <div className="font-bold text-xs text-slate-900">Name:</div>
-                    <div className="font-bold text-xs text-slate-900">School Principal/ Secretary to BOM</div>
-                    <div className="font-bold text-xs text-slate-900">Date:</div>
-                  </div>
-
-                  {/* 3. Bursar / Finance Officer */}
-                  <div className="space-y-1.5">
-                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
-                    <div className="font-bold text-xs text-slate-900">Name:</div>
-                    <div className="font-bold text-xs text-slate-900">Bursar/ Finance Officer</div>
-                    <div className="font-bold text-xs text-slate-900">Date:</div>
-                  </div>
+                {/* 3. Bursar / Finance Officer */}
+                <div className="space-y-1.5">
+                  <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                  <div className="font-bold text-xs text-slate-900">Name:</div>
+                  <div className="font-bold text-xs text-slate-900">Bursar/ Finance Officer</div>
+                  <div className="font-bold text-xs text-slate-900">Date:</div>
                 </div>
               </div>
             </div>

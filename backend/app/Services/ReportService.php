@@ -1089,8 +1089,7 @@ class ReportService
                 'note_7' => ['title' => '7. REPAIRS, MAINTENANCE & IMPROVEMENT (RMI)', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00],
                 'note_8' => ['title' => '8. LOCAL TRANSPORT & TRAVEL (LT&T)', 'current' => round($totSpent * 0.10, 2), 'prior' => 0.00],
                 'note_9' => ['title' => '9. ADMINISTRATIVE & RUNNING EXPENSES', 'current' => round($totSpent * 0.20, 2), 'prior' => 0.00],
-                'note_10'=> ['title' => '10. BOARDING & CATERING EXPENSES', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00],
-                'note_19'=> ['title' => '19. STOCK/ INVENTORY', 'current' => 0.00, 'prior' => 0.00]
+                'note_10'=> ['title' => '10. BOARDING & CATERING EXPENSES', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00]
             ],
             'statement_of_receipts_and_payments' => [
                 'total_receipts'  => $totalReceipts,
