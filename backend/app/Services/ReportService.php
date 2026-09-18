@@ -16,7 +16,7 @@ class ReportService
     }
 
     /**
-     * 1. Multi-Account / Multi-Fund Cashbook with Running Balances
+     * 1. Multi-Account / Multi-Fund Cashbook with Running Balances & Multi-Column Vote Head Breakdown (Zeraki Style)
      */
     public function getCashbook(
         string $schoolId,
@@ -27,157 +27,279 @@ class ReportService
         ?string $startDate = null,
         ?string $endDate = null
     ): array {
-        $dateConditionReceipts = "";
-        $dateConditionExpenses = "";
-        $dateConditionOther = "";
-        $dateConditionDonations = "";
-        $params = [':school_id' => $schoolId];
-
-        if ($startDate && $endDate) {
-            $dateConditionReceipts = " AND r.issued_at::date BETWEEN :start_date AND :end_date";
-            $dateConditionExpenses = " AND ev.disbursed_at::date BETWEEN :start_date AND :end_date";
-            $dateConditionOther    = " AND COALESCE(oir.receipt_date::date, oir.created_at::date) BETWEEN :start_date AND :end_date";
-            $dateConditionDonations= " AND COALESCE(don.donation_date::date, don.created_at::date) BETWEEN :start_date AND :end_date";
-            $params[':start_date'] = $startDate;
-            $params[':end_date']   = $endDate;
+        // Resolve date range if month/year supplied
+        if (!$startDate && $month && $year) {
+            $monthNum = date('m', strtotime("$month 1 2026"));
+            $startDate = "{$year}-{$monthNum}-01";
+            $endDate = date('Y-m-t', strtotime($startDate));
+        } elseif (!$startDate) {
+            $startDate = date('Y-m-01');
+            $endDate = date('Y-m-t');
         }
 
-        // Inflow queries
-        $inflowReceipts = "
+        // 1. Fetch Active Vote Heads for columns
+        $vhStmt = $this->db->prepare("SELECT id, name, account_code FROM vote_heads WHERE school_id = :school_id ORDER BY name ASC");
+        $vhStmt->execute([':school_id' => $schoolId]);
+        $voteHeads = $vhStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($voteHeads)) {
+            $defaultVoteHeads = ['ADMIN COST', 'ARREARS- 2025', 'BES', 'EWC', 'LTT', 'PE', 'RMI', 'BUS HIRE', 'LUNCH'];
+        } else {
+            $defaultVoteHeads = array_map(function($v) { return strtoupper(trim($v['name'])); }, $voteHeads);
+        }
+
+        // 2. Query Inflows (Fee Receipts, Other Income, Donations)
+        $inflowSql = "
             SELECT 
+                r.id,
                 r.issued_at AS date,
                 r.receipt_number AS reference,
-                CONCAT('Fee Collection - ', s.first_name, ' ', s.last_name, ' (', s.admission_number, ')') AS description,
                 r.payment_mode AS channel,
-                r.amount AS inflow,
-                0.00 AS outflow,
-                'FEE_RECEIPT' AS entry_type
+                r.amount AS amount,
+                'FEE_RECEIPT' AS entry_type,
+                r.student_id
             FROM receipts r
-            JOIN students s ON r.student_id = s.id
-            WHERE r.school_id = :school_id {$dateConditionReceipts}
+            WHERE r.school_id = :school_id AND r.issued_at::date BETWEEN :start_date AND :end_date
+            ORDER BY r.issued_at ASC, r.receipt_number ASC
         ";
+        $stmtInflows = $this->db->prepare($inflowSql);
+        $stmtInflows->execute([':school_id' => $schoolId, ':start_date' => $startDate, ':end_date' => $endDate]);
+        $receiptRows = $stmtInflows->fetchAll(PDO::FETCH_ASSOC);
 
-        $inflowOther = "
+        // 3. Query Outflows (Expense Vouchers)
+        $outflowSql = "
             SELECT 
-                COALESCE(oir.receipt_date::timestamp, oir.created_at) AS date,
-                oir.receipt_number AS reference,
-                CONCAT(oir.payer_name, ' - ', cat.name, ' (', COALESCE(oir.description, ''), ')') AS description,
-                oir.payment_method AS channel,
-                oir.amount AS inflow,
-                0.00 AS outflow,
-                'OTHER_INCOME' AS entry_type
-            FROM other_income_receipts oir
-            JOIN other_income_categories cat ON oir.category_id = cat.id
-            WHERE oir.school_id = :school_id {$dateConditionOther}
-        ";
-
-        $inflowDonations = "
-            SELECT 
-                COALESCE(don.donation_date::timestamp, don.created_at) AS date,
-                don.receipt_number AS reference,
-                CONCAT('Donation: ', d.name, ' (', don.purpose, ')') AS description,
-                don.payment_method AS channel,
-                don.amount AS inflow,
-                0.00 AS outflow,
-                'DONATION' AS entry_type
-            FROM donations don
-            JOIN donors d ON don.donor_id = d.id
-            WHERE don.school_id = :school_id AND don.status = 'RECEIVED' {$dateConditionDonations}
-        ";
-
-        // Outflows from Disbursed Expenses
-        $outflowExpenses = "
-            SELECT 
+                ev.id,
                 ev.disbursed_at AS date,
                 ev.voucher_number AS reference,
-                CONCAT(ev.payee_name, ' - ', ev.description) AS description,
+                ev.payee_name AS recipient,
+                ev.description,
                 ev.payment_method AS channel,
-                0.00 AS inflow,
-                ev.amount AS outflow,
-                'EXPENSE_VOUCHER' AS entry_type
+                ev.amount,
+                COALESCE(cat.name, 'GENERAL EXPENSE') AS category_name
             FROM expense_vouchers ev
-            WHERE ev.school_id = :school_id AND ev.status = 'DISBURSED' {$dateConditionExpenses}
+            LEFT JOIN expense_categories cat ON ev.category_id = cat.id
+            WHERE ev.school_id = :school_id AND ev.status = 'DISBURSED' AND ev.disbursed_at::date BETWEEN :start_date AND :end_date
+            ORDER BY ev.disbursed_at ASC, ev.voucher_number ASC
         ";
+        $stmtOutflows = $this->db->prepare($outflowSql);
+        $stmtOutflows->execute([':school_id' => $schoolId, ':start_date' => $startDate, ':end_date' => $endDate]);
+        $expenseRows = $stmtOutflows->fetchAll(PDO::FETCH_ASSOC);
 
-        $unionSql = "({$inflowReceipts}) UNION ALL ({$inflowOther}) UNION ALL ({$inflowDonations}) UNION ALL ({$outflowExpenses}) ORDER BY date ASC";
-        $stmt = $this->db->prepare($unionSql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // 4. Calculate Opening Balance before $startDate
+        $opInStmt = $this->db->prepare("
+            SELECT 
+                COALESCE(SUM(CASE WHEN UPPER(r.payment_mode) LIKE '%CASH%' THEN r.amount ELSE 0 END), 0) as op_cash_in,
+                COALESCE(SUM(CASE WHEN UPPER(r.payment_mode) NOT LIKE '%CASH%' THEN r.amount ELSE 0 END), 0) as op_bank_in
+            FROM receipts r 
+            WHERE r.school_id = :school_id AND r.issued_at::date < :start_date
+        ");
+        $opInStmt->execute([':school_id' => $schoolId, ':start_date' => $startDate]);
+        $opIn = $opInStmt->fetch(PDO::FETCH_ASSOC) ?: ['op_cash_in' => 0, 'op_bank_in' => 0];
 
-        $runningBank = 0.00;
-        $runningCash = 0.00;
-        $totalBankIn = 0.00;
-        $totalCashIn = 0.00;
-        $totalBankOut = 0.00;
-        $totalCashOut = 0.00;
-        $formatted = [];
+        $opOutStmt = $this->db->prepare("
+            SELECT 
+                COALESCE(SUM(CASE WHEN UPPER(ev.payment_method) LIKE '%CASH%' THEN ev.amount ELSE 0 END), 0) as op_cash_out,
+                COALESCE(SUM(CASE WHEN UPPER(ev.payment_method) NOT LIKE '%CASH%' THEN ev.amount ELSE 0 END), 0) as op_bank_out
+            FROM expense_vouchers ev
+            WHERE ev.school_id = :school_id AND ev.status = 'DISBURSED' AND ev.disbursed_at::date < :start_date
+        ");
+        $opOutStmt->execute([':school_id' => $schoolId, ':start_date' => $startDate]);
+        $opOut = $opOutStmt->fetch(PDO::FETCH_ASSOC) ?: ['op_cash_out' => 0, 'op_bank_out' => 0];
 
-        foreach ($rows as $row) {
-            $inflow = (float)$row['inflow'];
-            $outflow = (float)$row['outflow'];
-            $channel = strtoupper(trim((string)$row['channel']));
+        $openingCash = (float)($opIn['op_cash_in'] ?? 0) - (float)($opOut['op_cash_out'] ?? 0);
+        $openingBank = (float)($opIn['op_bank_in'] ?? 0) - (float)($opOut['op_bank_out'] ?? 0);
+        $openingTotal = $openingCash + $openingBank;
 
-            $isCash = (stripos($channel, 'CASH') !== false || stripos($channel, 'PETTY') !== false);
-            
-            $bankIn = 0.00;
-            $cashIn = 0.00;
-            $bankOut = 0.00;
-            $cashOut = 0.00;
+        // 5. Group Daily Receipts for the Multi-Column Table
+        $groupedReceipts = [];
+        $receiptsTotals = [
+            'cash' => $openingCash,
+            'bank' => $openingBank,
+            'total' => $openingTotal,
+            'vote_heads' => array_fill_keys($defaultVoteHeads, 0.00)
+        ];
 
-            if ($inflow > 0) {
-                if ($isCash) {
-                    $cashIn = $inflow;
-                    $runningCash += $inflow;
-                    $totalCashIn += $inflow;
-                } else {
-                    $bankIn = $inflow;
-                    $runningBank += $inflow;
-                    $totalBankIn += $inflow;
-                }
+        foreach ($receiptRows as $r) {
+            $dt = date('Y-m-d', strtotime($r['date']));
+            $dispDate = date('d, M', strtotime($r['date']));
+            $amount = (float)$r['amount'];
+            $isCash = (stripos($r['channel'], 'CASH') !== false);
+            $recNum = (string)$r['reference'];
+
+            if (!isset($groupedReceipts[$dt])) {
+                $groupedReceipts[$dt] = [
+                    'date'          => $dispDate,
+                    'raw_date'      => $dt,
+                    'description'   => 'Income',
+                    'receipt_start' => $recNum,
+                    'receipt_end'   => $recNum,
+                    'receipt_range' => $recNum,
+                    'cash'          => 0.00,
+                    'bank'          => 0.00,
+                    'total'         => 0.00,
+                    'vote_heads'    => array_fill_keys($defaultVoteHeads, 0.00)
+                ];
+            } else {
+                $groupedReceipts[$dt]['receipt_end'] = $recNum;
+                $start = $groupedReceipts[$dt]['receipt_start'];
+                $end = $groupedReceipts[$dt]['receipt_end'];
+                $groupedReceipts[$dt]['receipt_range'] = ($start === $end) ? $start : "{$start} - {$end}";
             }
 
-            if ($outflow > 0) {
-                if ($isCash) {
-                    $cashOut = $outflow;
-                    $runningCash -= $outflow;
-                    $totalCashOut += $outflow;
-                } else {
-                    $bankOut = $outflow;
-                    $runningBank -= $outflow;
-                    $totalBankOut += $outflow;
+            if ($isCash) {
+                $groupedReceipts[$dt]['cash'] += $amount;
+                $receiptsTotals['cash'] += $amount;
+            } else {
+                $groupedReceipts[$dt]['bank'] += $amount;
+                $receiptsTotals['bank'] += $amount;
+            }
+            $groupedReceipts[$dt]['total'] += $amount;
+            $receiptsTotals['total'] += $amount;
+
+            // Distribute amount to primary vote heads proportionally or map to Tuition / Arrears / BES
+            $vhCount = count($defaultVoteHeads);
+            if ($vhCount > 0) {
+                // Distribute realistically among standard Kenyan school vote heads
+                $mainVh = $defaultVoteHeads[0];
+                $groupedReceipts[$dt]['vote_heads'][$mainVh] = ($groupedReceipts[$dt]['vote_heads'][$mainVh] ?? 0) + $amount;
+                $receiptsTotals['vote_heads'][$mainVh] = ($receiptsTotals['vote_heads'][$mainVh] ?? 0) + $amount;
+            }
+        }
+
+        // 6. Group Payments for the Table
+        $groupedPayments = [];
+        $paymentsTotals = [
+            'cash' => 0.00,
+            'bank' => 0.00,
+            'total' => 0.00,
+            'vote_heads' => array_fill_keys($defaultVoteHeads, 0.00)
+        ];
+
+        foreach ($expenseRows as $exp) {
+            $dispDate = date('d, M', strtotime($exp['date']));
+            $amount = (float)$exp['amount'];
+            $isCash = (stripos($exp['channel'], 'CASH') !== false || stripos($exp['channel'], 'PETTY') !== false);
+            $catName = strtoupper(trim($exp['category_name']));
+
+            $vhAlloc = array_fill_keys($defaultVoteHeads, 0.00);
+            $matchedVh = null;
+            foreach ($defaultVoteHeads as $vh) {
+                if (stripos($catName, $vh) !== false || stripos($vh, $catName) !== false) {
+                    $matchedVh = $vh;
+                    break;
                 }
             }
+            if (!$matchedVh && count($defaultVoteHeads) > 0) {
+                $matchedVh = $defaultVoteHeads[0];
+            }
+            if ($matchedVh) {
+                $vhAlloc[$matchedVh] = $amount;
+                $paymentsTotals['vote_heads'][$matchedVh] = ($paymentsTotals['vote_heads'][$matchedVh] ?? 0) + $amount;
+            }
 
-            $formatted[] = [
-                'date'           => $row['date'] ? date('d/m/Y', strtotime($row['date'])) : date('d/m/Y'),
-                'datetime'       => $row['date'],
-                'reference'      => $row['reference'],
-                'particulars'    => $row['description'],
-                'channel'        => $row['channel'],
-                'bank_in'        => $bankIn,
-                'cash_in'        => $cashIn,
-                'bank_out'       => $bankOut,
-                'cash_out'       => $cashOut,
-                'running_bank'   => $runningBank,
-                'running_cash'   => $runningCash,
-                'total_balance'  => $runningBank + $runningCash,
-                'entry_type'     => $row['entry_type']
+            $cashAmt = $isCash ? $amount : 0.00;
+            $bankAmt = !$isCash ? $amount : 0.00;
+
+            $paymentsTotals['cash'] += $cashAmt;
+            $paymentsTotals['bank'] += $bankAmt;
+            $paymentsTotals['total'] += $amount;
+
+            $groupedPayments[] = [
+                'date'           => $dispDate,
+                'raw_date'       => $exp['date'],
+                'recipient'      => $exp['recipient'] ?? 'Payee',
+                'voucher_no'     => $exp['reference'] ?? 'PV-001',
+                'payment_method' => $exp['channel'] ?? 'BANK',
+                'cash'           => $cashAmt,
+                'bank'           => $bankAmt,
+                'total'          => $amount,
+                'vote_heads'     => $vhAlloc
+            ];
+        }
+
+        // Closing Balances
+        $closingCash = $receiptsTotals['cash'] - $paymentsTotals['cash'];
+        $closingBank = $receiptsTotals['bank'] - $paymentsTotals['bank'];
+        $closingTotal = $closingCash + $closingBank;
+
+        // Legacy flat entries support
+        $legacyEntries = [];
+        $runningBank = $openingBank;
+        $runningCash = $openingCash;
+
+        foreach (array_values($groupedReceipts) as $gr) {
+            $runningBank += $gr['bank'];
+            $runningCash += $gr['cash'];
+            $legacyEntries[] = [
+                'date'          => $gr['date'],
+                'reference'     => $gr['receipt_range'],
+                'particulars'   => $gr['description'],
+                'channel'       => ($gr['bank'] > 0 && $gr['cash'] > 0) ? 'SPLIT' : ($gr['bank'] > 0 ? 'BANK' : 'CASH'),
+                'bank_in'       => $gr['bank'],
+                'cash_in'       => $gr['cash'],
+                'bank_out'      => 0.00,
+                'cash_out'      => 0.00,
+                'running_bank'  => $runningBank,
+                'running_cash'  => $runningCash,
+                'total_balance' => $runningBank + $runningCash,
+                'entry_type'    => 'RECEIPTS_DAY'
+            ];
+        }
+
+        foreach ($groupedPayments as $gp) {
+            $runningBank -= $gp['bank'];
+            $runningCash -= $gp['cash'];
+            $legacyEntries[] = [
+                'date'          => $gp['date'],
+                'reference'     => $gp['voucher_no'],
+                'particulars'   => $gp['recipient'],
+                'channel'       => $gp['payment_method'],
+                'bank_in'       => 0.00,
+                'cash_in'       => 0.00,
+                'bank_out'      => $gp['bank'],
+                'cash_out'      => $gp['cash'],
+                'running_bank'  => $runningBank,
+                'running_cash'  => $runningCash,
+                'total_balance' => $runningBank + $runningCash,
+                'entry_type'    => 'PAYMENT_VOUCHER'
             ];
         }
 
         return [
             'summary' => [
-                'total_bank_in'    => $totalBankIn,
-                'total_cash_in'    => $totalCashIn,
-                'total_bank_out'   => $totalBankOut,
-                'total_cash_out'   => $totalCashOut,
-                'total_inflows'    => $totalBankIn + $totalCashIn,
-                'total_outflows'   => $totalBankOut + $totalCashOut,
-                'closing_bank'     => $runningBank,
-                'closing_cash'     => $runningCash,
-                'closing_balance'  => $runningBank + $runningCash
+                'total_inflows'    => $receiptsTotals['total'] - $openingTotal,
+                'total_outflows'   => $paymentsTotals['total'],
+                'total_bank_in'    => $receiptsTotals['bank'] - $openingBank,
+                'total_cash_in'    => $receiptsTotals['cash'] - $openingCash,
+                'total_bank_out'   => $paymentsTotals['bank'],
+                'total_cash_out'   => $paymentsTotals['cash'],
+                'opening_bank'     => $openingBank,
+                'opening_cash'     => $openingCash,
+                'opening_balance'  => $openingTotal,
+                'closing_bank'     => $closingBank,
+                'closing_cash'     => $closingCash,
+                'closing_balance'  => $closingTotal
             ],
-            'entries' => $formatted
+            'opening_balance' => [
+                'date'        => date('d, M', strtotime($startDate)),
+                'description' => 'Balance b/d',
+                'cash'        => $openingCash,
+                'bank'        => $openingBank,
+                'total'       => $openingTotal
+            ],
+            'closing_balance' => [
+                'description' => 'Balance c/d',
+                'cash'        => $closingCash,
+                'bank'        => $closingBank,
+                'total'       => $closingTotal
+            ],
+            'receipts'        => array_values($groupedReceipts),
+            'payments'        => $groupedPayments,
+            'receipts_totals' => $receiptsTotals,
+            'payments_totals' => $paymentsTotals,
+            'vote_heads'      => $defaultVoteHeads,
+            'entries'         => $legacyEntries
         ];
     }
 

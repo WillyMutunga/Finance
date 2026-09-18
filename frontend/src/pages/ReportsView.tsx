@@ -101,9 +101,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
   const [receivedChequesList, setReceivedChequesList] = useState<any[]>([]);
 
   // 3. Financial Reports State
-  const [cashbookData, setCashbookData] = useState<any>({ summary: {}, entries: [] });
+  const [cashbookData, setCashbookData] = useState<any>({ summary: {}, entries: [], receipts: [], payments: [], vote_heads: [] });
   const [trialBalanceData, setTrialBalanceData] = useState<any>(null);
   const [consolidatedTbData, setConsolidatedTbData] = useState<any>(null);
+  const [cashbookAccountType, setCashbookAccountType] = useState('SCHOOL FUND');
+  const [cashbookBankId, setCashbookBankId] = useState('');
+  const [cashbookFinancialYear, setCashbookFinancialYear] = useState('2026/2027');
+  const [cashbookMonth, setCashbookMonth] = useState('SEPTEMBER');
+  const [cashbookViewMode, setCashbookViewMode] = useState<'combined' | 'separated'>('combined');
+  const [bankAccountsList, setBankAccountsList] = useState<any[]>([]);
 
   // 4. IPSAS Reports State
   const [ipsasData, setIpsasData] = useState<any>(null);
@@ -115,8 +121,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
   // Initial Load
   useEffect(() => {
     loadClasses();
+    loadBankAccounts();
     loadActiveTabData();
-  }, [activeSubTab, studentSubTab, summarySubTab, financialSubTab, ipsasSubTab, agingSubTab, selectedClassId, selectedStatus, financialYear]);
+  }, [activeSubTab, studentSubTab, summarySubTab, financialSubTab, ipsasSubTab, agingSubTab, selectedClassId, selectedStatus, financialYear, cashbookAccountType, cashbookBankId, cashbookFinancialYear, cashbookMonth]);
 
   const loadClasses = async () => {
     try {
@@ -126,6 +133,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const loadBankAccounts = async () => {
+    try {
+      const res = await ApiService.getAccounts();
+      if (res && res.data) {
+        setBankAccountsList(res.data);
+      }
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -175,7 +193,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
         }
       } else if (activeSubTab === 'financial-reports') {
         if (financialSubTab === 'Cash Book') {
-          const res = await ApiService.getCashbook({ start_date: startDate, end_date: endDate });
+          const yr = cashbookFinancialYear.split('/')[0] || '2026';
+          const res = await ApiService.getCashbook({
+            account_type_id: cashbookAccountType,
+            bank_account_id: cashbookBankId,
+            month: cashbookMonth,
+            year: yr
+          });
           if (res && res.data) setCashbookData(res.data);
         } else if (financialSubTab === 'Trial Balance') {
           const res = await ApiService.getTrialBalance();
@@ -914,76 +938,517 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
           </div>
 
           <div className="p-5 flex-1 space-y-4">
-            {/* SUB-VIEW 1: Cash Book */}
+            {/* SUB-VIEW 1: Cash Book (Zeraki Finance Standard) */}
             {financialSubTab === 'Cash Book' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Total Inflows</span>
-                    <div className="text-base font-extrabold text-emerald-800 font-mono mt-0.5">
-                      KES {formatCurrency(cashbookData.summary?.total_inflows)}
+              <div className="space-y-6">
+                {/* 1. Filter Controls Bar */}
+                <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Add Account Type */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Add Account Type</label>
+                      <div className="relative">
+                        <select
+                          value={cashbookAccountType}
+                          onChange={(e) => setCashbookAccountType(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none pr-8 cursor-pointer"
+                        >
+                          <option value="SCHOOL FUND">SCHOOL FUND</option>
+                          <option value="OPERATION ACCOUNT">OPERATION ACCOUNT</option>
+                          <option value="TUITION ACCOUNT">TUITION ACCOUNT</option>
+                          <option value="BOARDING ACCOUNT">BOARDING ACCOUNT</option>
+                          <option value="DEVELOPMENT ACCOUNT">DEVELOPMENT ACCOUNT</option>
+                          <option value="SPECIAL EXAMS">SPECIAL EXAMS</option>
+                        </select>
+                        {cashbookAccountType && (
+                          <button
+                            type="button"
+                            onClick={() => setCashbookAccountType('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                            title="Clear"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Total Outflows</span>
-                    <div className="text-base font-extrabold text-rose-700 font-mono mt-0.5">
-                      KES {formatCurrency(cashbookData.summary?.total_outflows)}
+
+                    {/* Bank (Optional) */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Bank (Optional)</label>
+                      <select
+                        value={cashbookBankId}
+                        onChange={(e) => setCashbookBankId(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                      >
+                        <option value="">Select an account</option>
+                        {bankAccountsList.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bank_name} - {b.account_name} ({b.account_number})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Closing Bank</span>
-                    <div className="text-base font-extrabold text-slate-900 font-mono mt-0.5">
-                      KES {formatCurrency(cashbookData.summary?.closing_bank)}
+
+                    {/* Financial Year */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Financial Year</label>
+                      <div className="relative">
+                        <select
+                          value={cashbookFinancialYear}
+                          onChange={(e) => setCashbookFinancialYear(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none pr-8 cursor-pointer"
+                        >
+                          <option value="2026/2027">2026/2027</option>
+                          <option value="2025/2026">2025/2026</option>
+                          <option value="2024/2025">2024/2025</option>
+                          <option value="2023/2024">2023/2024</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setCashbookFinancialYear('2026/2027')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                          title="Reset"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">Closing Cash</span>
-                    <div className="text-base font-extrabold text-slate-900 font-mono mt-0.5">
-                      KES {formatCurrency(cashbookData.summary?.closing_cash)}
+
+                    {/* Month & Submit Button */}
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 relative">
+                        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Month</label>
+                        <select
+                          value={cashbookMonth}
+                          onChange={(e) => setCashbookMonth(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3.5 py-2 text-xs font-medium text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none pr-8 cursor-pointer uppercase"
+                        >
+                          {['ALL', 'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'].map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setCashbookMonth('ALL')}
+                          className="absolute right-2.5 top-8 text-slate-400 hover:text-slate-600 p-0.5"
+                          title="Clear Month"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={handleRefresh}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-6 py-2.5 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
+                      >
+                        <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                        <span>View Cash Book</span>
+                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                      <tr>
-                        <th className="py-2.5 px-3">Date</th>
-                        <th className="py-2.5 px-3">Reference</th>
-                        <th className="py-2.5 px-4">Particulars</th>
-                        <th className="py-2.5 px-3">Mode</th>
-                        <th className="py-2.5 px-3 text-right">Bank In (DR)</th>
-                        <th className="py-2.5 px-3 text-right">Cash In (DR)</th>
-                        <th className="py-2.5 px-3 text-right">Bank Out (CR)</th>
-                        <th className="py-2.5 px-3 text-right">Cash Out (CR)</th>
-                        <th className="py-2.5 px-3 text-right">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                      {(!cashbookData.entries || cashbookData.entries.length === 0) ? (
-                        <tr>
-                          <td colSpan={9} className="py-12 text-center text-slate-400 font-sans">
-                            No cashbook transactions found in ledger.
-                          </td>
-                        </tr>
-                      ) : (
-                        cashbookData.entries.map((e: any, idx: number) => (
-                          <tr key={idx} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-3 text-slate-600 font-sans">{e.date}</td>
-                            <td className="py-2.5 px-3 font-semibold text-slate-900">{e.reference}</td>
-                            <td className="py-2.5 px-4 font-sans text-slate-800">{e.particulars}</td>
-                            <td className="py-2.5 px-3 font-sans text-[10px] uppercase text-slate-500">{e.channel}</td>
-                            <td className="py-2.5 px-3 text-right text-emerald-700">{e.bank_in > 0 ? formatCurrency(e.bank_in) : '-'}</td>
-                            <td className="py-2.5 px-3 text-right text-emerald-700">{e.cash_in > 0 ? formatCurrency(e.cash_in) : '-'}</td>
-                            <td className="py-2.5 px-3 text-right text-rose-700">{e.bank_out > 0 ? formatCurrency(e.bank_out) : '-'}</td>
-                            <td className="py-2.5 px-3 text-right text-rose-700">{e.cash_out > 0 ? formatCurrency(e.cash_out) : '-'}</td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">{formatCurrency(e.total_balance)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                {/* 2. Top View Controls & Centered Document Title */}
+                <div className="bg-slate-100/70 p-3.5 rounded-xl border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
+                  {/* View Mode Pill Toggle */}
+                  <div className="inline-flex bg-white p-1 rounded-lg border border-slate-200 shadow-xs">
+                    <button
+                      onClick={() => setCashbookViewMode('combined')}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                        cashbookViewMode === 'combined'
+                          ? 'bg-sky-100 text-sky-900 shadow-xs border border-sky-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {cashbookViewMode === 'combined' && <Check className="w-3.5 h-3.5 text-sky-700" />}
+                      <span>Combined</span>
+                    </button>
+                    <button
+                      onClick={() => setCashbookViewMode('separated')}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                        cashbookViewMode === 'separated'
+                          ? 'bg-sky-100 text-sky-900 shadow-xs border border-sky-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {cashbookViewMode === 'separated' && <Check className="w-3.5 h-3.5 text-sky-700" />}
+                      <span>Separated</span>
+                    </button>
+                  </div>
+
+                  {/* Centered Document Title */}
+                  <h3 className="font-extrabold text-slate-900 text-sm md:text-base tracking-wide uppercase text-center font-sans">
+                    {cashbookAccountType || 'SCHOOL FUND'} CASH BOOK FOR {cashbookMonth || 'SEPTEMBER'} {cashbookFinancialYear || '2026/2027'}
+                  </h3>
+
+                  {/* Print & Export Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg shadow-xs cursor-pointer transition-colors"
+                      title="Print Cash Book"
+                    >
+                      <Printer className="w-4 h-4 text-slate-600" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const voteHeads: string[] = cashbookData.vote_heads || [];
+                        const headers = ['Date', 'Description', 'Receipt Range', 'Cash', 'Bank', 'Total', ...voteHeads];
+                        const rows = (cashbookData.receipts || []).map((r: any) => [
+                          r.date,
+                          r.description,
+                          r.receipt_range,
+                          r.cash,
+                          r.bank,
+                          r.total,
+                          ...voteHeads.map((vh: string) => r.vote_heads?.[vh] || 0)
+                        ]);
+                        exportToCsv(`CashBook_${cashbookAccountType}_${cashbookMonth}_${cashbookFinancialYear.replace('/', '-')}`, headers, rows);
+                      }}
+                      className="p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg shadow-xs cursor-pointer transition-colors"
+                      title="Export to Spreadsheet / CSV"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* 3. MULTI-COLUMN CASH BOOK TABLE: COMBINED MODE */}
+                {cashbookViewMode === 'combined' && (
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm bg-white">
+                    {(() => {
+                      const voteHeads: string[] = (cashbookData.vote_heads && cashbookData.vote_heads.length > 0)
+                        ? cashbookData.vote_heads
+                        : ['ADMIN COST', 'ARREARS- 2025', 'BES', 'EWC', 'LTT', 'PE', 'RMI', 'BUS HIRE', 'LUNCH'];
+
+                      const receiptsList = cashbookData.receipts || [];
+                      const paymentsList = cashbookData.payments || [];
+                      const maxRows = Math.max(receiptsList.length, paymentsList.length, 1);
+
+                      const opBal = cashbookData.opening_balance || { cash: 0, bank: 0, total: 0 };
+                      const clBal = cashbookData.closing_balance || { cash: 0, bank: 0, total: 0 };
+                      const recTotals = cashbookData.receipts_totals || { cash: 0, bank: 0, total: 0, vote_heads: {} };
+                      const payTotals = cashbookData.payments_totals || { cash: 0, bank: 0, total: 0, vote_heads: {} };
+
+                      return (
+                        <table className="w-full text-left text-xs border-collapse min-w-[1400px]">
+                          {/* Main Split Header: Receipts on Left | Payments on Right */}
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-800 font-extrabold text-[11px] uppercase border-b border-slate-300">
+                              <th colSpan={6 + voteHeads.length} className="py-2.5 px-4 text-left border-r-2 border-slate-300 bg-slate-100 text-slate-900">
+                                Receipts (Income)
+                              </th>
+                              <th colSpan={7 + Math.min(voteHeads.length, 5)} className="py-2.5 px-4 text-left bg-slate-100 text-slate-900">
+                                Payments
+                              </th>
+                            </tr>
+                            <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-[10px] uppercase tracking-wider divide-x divide-slate-200">
+                              {/* Receipts Columns */}
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-3">Description</th>
+                              <th className="py-2.5 px-3">Receipt Range</th>
+                              <th className="py-2.5 px-3 text-right">Cash</th>
+                              <th className="py-2.5 px-3 text-right">Bank</th>
+                              <th className="py-2.5 px-3 text-right font-extrabold bg-slate-100/50">Total</th>
+                              {voteHeads.map((vh) => (
+                                <th key={vh} className="py-2.5 px-2.5 text-right font-semibold whitespace-nowrap">{vh}</th>
+                              ))}
+
+                              {/* Payments Columns */}
+                              <th className="py-2.5 px-3 border-l-2 border-slate-300">Date</th>
+                              <th className="py-2.5 px-3">Recipient</th>
+                              <th className="py-2.5 px-3">Voucher No.</th>
+                              <th className="py-2.5 px-3">Payment Method</th>
+                              <th className="py-2.5 px-3 text-right">Cash</th>
+                              <th className="py-2.5 px-3 text-right">Bank</th>
+                              <th className="py-2.5 px-3 text-right font-extrabold bg-slate-100/50">Total</th>
+                              {voteHeads.slice(0, 5).map((vh) => (
+                                <th key={`p_${vh}`} className="py-2.5 px-2.5 text-right font-semibold whitespace-nowrap">{vh}</th>
+                              ))}
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-slate-100 text-[11px] font-mono">
+                            {/* Row 0: Opening Balance b/d on Receipts Side */}
+                            <tr className="bg-slate-50/50 hover:bg-slate-50 divide-x divide-slate-100 font-medium">
+                              <td className="py-2.5 px-3 text-slate-600 font-sans">{cashbookFinancialYear}</td>
+                              <td className="py-2.5 px-3 font-bold font-sans text-slate-900">Balance b/d</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrency(opBal.cash)}</td>
+                              <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrency(opBal.bank)}</td>
+                              <td className="py-2.5 px-3 text-right font-bold text-slate-950 bg-slate-50/60">{formatCurrency(opBal.total)}</td>
+                              {voteHeads.map((vh) => (
+                                <td key={`op_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+
+                              {/* Right Side: Empty for b/d */}
+                              <td className="py-2.5 px-3 border-l-2 border-slate-300 font-sans text-slate-600">{cashbookFinancialYear}</td>
+                              <td className="py-2.5 px-3 font-sans text-slate-700">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400 bg-slate-50/60">-</td>
+                              {voteHeads.slice(0, 5).map((vh) => (
+                                <td key={`op_pay_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+                            </tr>
+
+                            {/* Data Rows */}
+                            {Array.from({ length: maxRows }).map((_, idx) => {
+                              const r = receiptsList[idx];
+                              const p = paymentsList[idx];
+
+                              return (
+                                <tr key={idx} className="hover:bg-slate-50/80 divide-x divide-slate-100 transition-colors">
+                                  {/* Left: Receipt Data */}
+                                  <td className="py-2 px-3 text-slate-600 font-sans whitespace-nowrap">{r ? r.date : ''}</td>
+                                  <td className="py-2 px-3 font-sans text-slate-800">{r ? r.description : ''}</td>
+                                  <td className="py-2 px-3 font-semibold text-slate-900 whitespace-nowrap">{r ? r.receipt_range : ''}</td>
+                                  <td className="py-2 px-3 text-right text-slate-800">{r && r.cash > 0 ? formatCurrency(r.cash) : (r ? '-' : '')}</td>
+                                  <td className="py-2 px-3 text-right text-slate-800">{r && r.bank > 0 ? formatCurrency(r.bank) : (r ? '-' : '')}</td>
+                                  <td className="py-2 px-3 text-right font-bold text-slate-950 bg-slate-50/60">{r ? formatCurrency(r.total) : ''}</td>
+                                  {voteHeads.map((vh) => {
+                                    const val = r?.vote_heads?.[vh];
+                                    return (
+                                      <td key={`r_${idx}_${vh}`} className="py-2 px-2.5 text-right text-slate-700">
+                                        {val > 0 ? formatCurrency(val) : (r ? '-' : '')}
+                                      </td>
+                                    );
+                                  })}
+
+                                  {/* Right: Payment Data */}
+                                  <td className="py-2 px-3 border-l-2 border-slate-300 font-sans text-slate-600 whitespace-nowrap">{p ? p.date : ''}</td>
+                                  <td className="py-2 px-3 font-sans text-slate-800">{p ? p.recipient : ''}</td>
+                                  <td className="py-2 px-3 font-semibold text-slate-900">{p ? p.voucher_no : ''}</td>
+                                  <td className="py-2 px-3 text-[10px] uppercase font-sans text-slate-500">{p ? p.payment_method : ''}</td>
+                                  <td className="py-2 px-3 text-right text-rose-700">{p && p.cash > 0 ? formatCurrency(p.cash) : (p ? '-' : '')}</td>
+                                  <td className="py-2 px-3 text-right text-rose-700">{p && p.bank > 0 ? formatCurrency(p.bank) : (p ? '-' : '')}</td>
+                                  <td className="py-2 px-3 text-right font-bold text-slate-950 bg-slate-50/60">{p ? formatCurrency(p.total) : ''}</td>
+                                  {voteHeads.slice(0, 5).map((vh) => {
+                                    const val = p?.vote_heads?.[vh];
+                                    return (
+                                      <td key={`p_${idx}_${vh}`} className="py-2 px-2.5 text-right text-slate-700">
+                                        {val > 0 ? formatCurrency(val) : (p ? '-' : '')}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+
+                            {/* Closing Balance Row (Balance c/d) on Payments Side */}
+                            <tr className="bg-slate-50/50 hover:bg-slate-50 divide-x divide-slate-100 font-medium">
+                              {/* Left Side: Empty for c/d */}
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-400 bg-slate-50/60">-</td>
+                              {voteHeads.map((vh) => (
+                                <td key={`cd_rec_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+
+                              {/* Right Side: Balance c/d */}
+                              <td className="py-2.5 px-3 border-l-2 border-slate-300 font-sans text-slate-600">30, {cashbookMonth.slice(0, 3)}</td>
+                              <td className="py-2.5 px-3 font-bold font-sans text-slate-900">Balance c/d</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrency(clBal.cash)}</td>
+                              <td className="py-2.5 px-3 text-right text-slate-800">{formatCurrency(clBal.bank)}</td>
+                              <td className="py-2.5 px-3 text-right font-bold text-slate-950 bg-slate-50/60">{formatCurrency(clBal.total)}</td>
+                              {voteHeads.slice(0, 5).map((vh) => (
+                                <td key={`cd_pay_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+                            </tr>
+
+                            {/* Final Balanced TOTAL Row */}
+                            <tr className="bg-slate-100 text-slate-950 font-extrabold text-[11px] divide-x divide-slate-200 border-t-2 border-b-4 border-double border-slate-400">
+                              <td colSpan={3} className="py-3 px-4 font-sans uppercase">TOTAL</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(recTotals.cash)}</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(recTotals.bank)}</td>
+                              <td className="py-3 px-3 text-right bg-slate-200/50">{formatCurrency(recTotals.total)}</td>
+                              {voteHeads.map((vh) => (
+                                <td key={`tot_rec_${vh}`} className="py-3 px-2.5 text-right">
+                                  {formatCurrency(recTotals.vote_heads?.[vh] || 0)}
+                                </td>
+                              ))}
+
+                              {/* Right Payments Total */}
+                              <td colSpan={4} className="py-3 px-4 border-l-2 border-slate-300 font-sans uppercase">TOTAL</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(recTotals.cash)}</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(recTotals.bank)}</td>
+                              <td className="py-3 px-3 text-right bg-slate-200/50">{formatCurrency(recTotals.total)}</td>
+                              {voteHeads.slice(0, 5).map((vh) => (
+                                <td key={`tot_pay_${vh}`} className="py-3 px-2.5 text-right">
+                                  {formatCurrency(payTotals.vote_heads?.[vh] || 0)}
+                                </td>
+                              ))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* 4. MULTI-COLUMN CASH BOOK TABLE: SEPARATED MODE */}
+                {cashbookViewMode === 'separated' && (
+                  <div className="space-y-6">
+                    {/* Receipts Card */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="bg-emerald-50/80 px-4 py-3 border-b border-emerald-100 flex items-center justify-between">
+                        <span className="font-bold text-emerald-950 text-xs uppercase tracking-wider">
+                          1. Receipts (Inflows & Collections)
+                        </span>
+                        <span className="text-xs font-mono font-bold text-emerald-900">
+                          Total Receipts: KES {formatCurrency(cashbookData.receipts_totals?.total)}
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-[10px] uppercase">
+                            <tr>
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-3">Description</th>
+                              <th className="py-2.5 px-3">Receipt Range</th>
+                              <th className="py-2.5 px-3 text-right">Cash</th>
+                              <th className="py-2.5 px-3 text-right">Bank</th>
+                              <th className="py-2.5 px-3 text-right font-extrabold bg-slate-100">Total</th>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <th key={vh} className="py-2.5 px-2.5 text-right font-semibold whitespace-nowrap">{vh}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                            {/* Opening Balance */}
+                            <tr className="bg-slate-50/50 font-medium">
+                              <td className="py-2.5 px-3 font-sans">{cashbookFinancialYear}</td>
+                              <td className="py-2.5 px-3 font-bold font-sans">Balance b/d</td>
+                              <td className="py-2.5 px-3">-</td>
+                              <td className="py-2.5 px-3 text-right">{formatCurrency(cashbookData.opening_balance?.cash)}</td>
+                              <td className="py-2.5 px-3 text-right">{formatCurrency(cashbookData.opening_balance?.bank)}</td>
+                              <td className="py-2.5 px-3 text-right font-bold bg-slate-50">{formatCurrency(cashbookData.opening_balance?.total)}</td>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <td key={`sep_op_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+                            </tr>
+                            {(cashbookData.receipts || []).map((r: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="py-2.5 px-3 font-sans">{r.date}</td>
+                                <td className="py-2.5 px-3 font-sans text-slate-800">{r.description}</td>
+                                <td className="py-2.5 px-3 font-semibold text-slate-900">{r.receipt_range}</td>
+                                <td className="py-2.5 px-3 text-right">{r.cash > 0 ? formatCurrency(r.cash) : '-'}</td>
+                                <td className="py-2.5 px-3 text-right">{r.bank > 0 ? formatCurrency(r.bank) : '-'}</td>
+                                <td className="py-2.5 px-3 text-right font-bold bg-slate-50">{formatCurrency(r.total)}</td>
+                                {(cashbookData.vote_heads || []).map((vh: string) => (
+                                  <td key={`sep_r_${idx}_${vh}`} className="py-2.5 px-2.5 text-right text-slate-700">
+                                    {r.vote_heads?.[vh] > 0 ? formatCurrency(r.vote_heads[vh]) : '-'}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                            {/* Receipts Total */}
+                            <tr className="bg-slate-100 text-slate-950 font-extrabold text-[11px] border-t-2 border-b-2 border-slate-300">
+                              <td colSpan={3} className="py-3 px-3 font-sans uppercase">Total Receipts</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(cashbookData.receipts_totals?.cash)}</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(cashbookData.receipts_totals?.bank)}</td>
+                              <td className="py-3 px-3 text-right bg-slate-200/50">{formatCurrency(cashbookData.receipts_totals?.total)}</td>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <td key={`sep_tot_${vh}`} className="py-3 px-2.5 text-right">
+                                  {formatCurrency(cashbookData.receipts_totals?.vote_heads?.[vh] || 0)}
+                                </td>
+                              ))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Payments Card */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="bg-rose-50/80 px-4 py-3 border-b border-rose-100 flex items-center justify-between">
+                        <span className="font-bold text-rose-950 text-xs uppercase tracking-wider">
+                          2. Payments (Disbursements & Expenditure)
+                        </span>
+                        <span className="text-xs font-mono font-bold text-rose-900">
+                          Total Payments: KES {formatCurrency(cashbookData.payments_totals?.total)}
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-[10px] uppercase">
+                            <tr>
+                              <th className="py-2.5 px-3">Date</th>
+                              <th className="py-2.5 px-3">Recipient</th>
+                              <th className="py-2.5 px-3">Voucher No.</th>
+                              <th className="py-2.5 px-3">Payment Method</th>
+                              <th className="py-2.5 px-3 text-right">Cash</th>
+                              <th className="py-2.5 px-3 text-right">Bank</th>
+                              <th className="py-2.5 px-3 text-right font-extrabold bg-slate-100">Total</th>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <th key={`p_sep_h_${vh}`} className="py-2.5 px-2.5 text-right font-semibold whitespace-nowrap">{vh}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                            {(cashbookData.payments || []).length === 0 ? (
+                              <tr>
+                                <td colSpan={7 + (cashbookData.vote_heads?.length || 0)} className="py-8 text-center text-slate-400 font-sans">
+                                  No payment vouchers recorded in this period.
+                                </td>
+                              </tr>
+                            ) : (
+                              (cashbookData.payments || []).map((p: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-slate-50">
+                                  <td className="py-2.5 px-3 font-sans">{p.date}</td>
+                                  <td className="py-2.5 px-3 font-sans text-slate-800">{p.recipient}</td>
+                                  <td className="py-2.5 px-3 font-semibold text-slate-900">{p.voucher_no}</td>
+                                  <td className="py-2.5 px-3 text-[10px] uppercase font-sans text-slate-500">{p.payment_method}</td>
+                                  <td className="py-2.5 px-3 text-right text-rose-700">{p.cash > 0 ? formatCurrency(p.cash) : '-'}</td>
+                                  <td className="py-2.5 px-3 text-right text-rose-700">{p.bank > 0 ? formatCurrency(p.bank) : '-'}</td>
+                                  <td className="py-2.5 px-3 text-right font-bold bg-slate-50">{formatCurrency(p.total)}</td>
+                                  {(cashbookData.vote_heads || []).map((vh: string) => (
+                                    <td key={`sep_p_${idx}_${vh}`} className="py-2.5 px-2.5 text-right text-slate-700">
+                                      {p.vote_heads?.[vh] > 0 ? formatCurrency(p.vote_heads[vh]) : '-'}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))
+                            )}
+                            {/* Closing Balance */}
+                            <tr className="bg-slate-50/50 font-medium">
+                              <td className="py-2.5 px-3 font-sans">30, {cashbookMonth.slice(0, 3)}</td>
+                              <td className="py-2.5 px-3 font-bold font-sans">Balance c/d</td>
+                              <td className="py-2.5 px-3">-</td>
+                              <td className="py-2.5 px-3 text-slate-400 font-sans">-</td>
+                              <td className="py-2.5 px-3 text-right">{formatCurrency(cashbookData.closing_balance?.cash)}</td>
+                              <td className="py-2.5 px-3 text-right">{formatCurrency(cashbookData.closing_balance?.bank)}</td>
+                              <td className="py-2.5 px-3 text-right font-bold bg-slate-50">{formatCurrency(cashbookData.closing_balance?.total)}</td>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <td key={`sep_cd_${vh}`} className="py-2.5 px-2.5 text-right text-slate-400">-</td>
+                              ))}
+                            </tr>
+                            {/* Payments Total */}
+                            <tr className="bg-slate-100 text-slate-950 font-extrabold text-[11px] border-t-2 border-b-2 border-slate-300">
+                              <td colSpan={4} className="py-3 px-3 font-sans uppercase">Total Payments</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(cashbookData.receipts_totals?.cash)}</td>
+                              <td className="py-3 px-3 text-right">{formatCurrency(cashbookData.receipts_totals?.bank)}</td>
+                              <td className="py-3 px-3 text-right bg-slate-200/50">{formatCurrency(cashbookData.receipts_totals?.total)}</td>
+                              {(cashbookData.vote_heads || []).map((vh: string) => (
+                                <td key={`sep_p_tot_${vh}`} className="py-3 px-2.5 text-right">
+                                  {formatCurrency(cashbookData.payments_totals?.vote_heads?.[vh] || 0)}
+                                </td>
+                              ))}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
