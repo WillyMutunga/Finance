@@ -27,13 +27,16 @@ class Database
                 $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4";
                 self::$instance = new PDO($dsn, $config['username'], $config['password'], $pdoOptions);
             } else {
-                // PostgreSQL: Try Unix sockets (standard for cPanel shared hosting) then TCP
+                // PostgreSQL: Try SSL require (required by cPanel pg_hba.conf for TCP) and Unix sockets
                 $dsnCandidates = [
+                    "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']};sslmode=require",
+                    "pgsql:host=localhost;port=5432;dbname={$config['database']};sslmode=require",
+                    "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']};sslmode=allow",
+                    "pgsql:host=/tmp;port=5432;dbname={$config['database']}",
+                    "pgsql:host=/var/run/postgresql;port=5432;dbname={$config['database']}",
+                    "pgsql:host=/var/pgsql;port=5432;dbname={$config['database']}",
                     "pgsql:dbname={$config['database']}",
-                    "pgsql:host=/tmp;dbname={$config['database']}",
-                    "pgsql:host=/var/run/postgresql;dbname={$config['database']}",
-                    "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']};sslmode={$config['sslmode']}",
-                    "pgsql:host=127.0.0.1;port={$config['port']};dbname={$config['database']}"
+                    "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']};sslmode={$config['sslmode']}"
                 ];
 
                 $lastException = null;
