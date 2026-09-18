@@ -694,33 +694,6 @@ try {
         (new WebhookController())->simulateC2B();
     }
 
-    // DB Connection Diagnostic
-    elseif ($uri === '/db-diag') {
-        $configFile = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
-        $config = require $configFile;
-        
-        $usernames = ['skysofts_sharks', 'skysofts_Sharks', 'skysofts_finance', 'skysofts'];
-        $results = [];
-        
-        foreach ($usernames as $u) {
-            $dsn = "pgsql:host=/var/run/postgresql;port=5432;dbname={$config['database']}";
-            try {
-                $p = new PDO($dsn, $u, $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-                $stmt = $p->query("SELECT count(*) as c FROM users");
-                $r = $stmt->fetch(PDO::FETCH_ASSOC);
-                $results[$u] = ['status' => 'SUCCESS', 'user_count' => $r['c']];
-            } catch (\Throwable $ex) {
-                $results[$u] = ['status' => 'FAIL', 'error' => $ex->getMessage()];
-            }
-        }
-        
-        echo json_encode([
-            'results' => $results,
-            'db' => $config['database']
-        ], JSON_PRETTY_PRINT);
-        exit;
-    }
-
     // Health check
     elseif ($uri === '/' || $uri === '/health') {
         echo json_encode([

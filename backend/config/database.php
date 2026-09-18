@@ -22,10 +22,10 @@ $defaultPort = ($driver === 'mysql') ? '3306' : '5432';
 
 return [
     'driver'    => $driver,
-    'host'      => getenv('DB_HOST') ?: '127.0.0.1',
+    'host'      => getenv('DB_HOST') ?: '/var/run/postgresql',
     'port'      => getenv('DB_PORT') ?: $defaultPort,
-    'database'  => getenv('DB_DATABASE') ?: 'finance',
-    'username'  => getenv('DB_USERNAME') ?: 'postgres',
+    'database'  => getenv('DB_DATABASE') ?: 'skysofts_finance',
+    'username'  => getenv('DB_USERNAME') ?: 'skysofts_Sharks',
     'password'  => getenv('DB_PASSWORD') ?: 'William#20',
     'charset'   => 'utf8mb4',
     'schema'    => 'public',
