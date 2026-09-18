@@ -48,7 +48,7 @@ jobs:
           # If .env.production exists or create a fallback template
           cat << 'EOF' > deploy_package/api/.env
           DB_CONNECTION=pgsql
-          DB_HOST=127.0.0.1
+          DB_HOST=localhost
           DB_PORT=5432
           DB_DATABASE=skysofts_finance
           DB_USERNAME=skysofts_sharks
