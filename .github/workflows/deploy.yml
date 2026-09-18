@@ -55,7 +55,7 @@ jobs:
           DB_PASSWORD=William#20
           DB_SSLMODE=prefer
           APP_ENV=production
-          APP_DEBUG=true
+          APP_DEBUG=false
           APP_SECRET=a8f8b89c02d7e484a86e921b77cd4b9e289f81643c13e51a2d5e317c8d99042b
           EOF
 
