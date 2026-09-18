@@ -12,8 +12,8 @@ class Database
 
     public static function getConnection(): PDO
     {
-        if (self::$instance === null) {
-            $config = require __DIR__ . '/../config/database.php';
+            $configFile = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
+            $config = require $configFile;
             $driver = $config['driver'] ?? 'pgsql';
             if ($driver === 'mysql') {
                 $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4";

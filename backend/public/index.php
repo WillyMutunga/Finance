@@ -1,7 +1,8 @@
 <?php
 // Load .env if present
-$envFile = __DIR__ . '/../.env';
-if (file_exists($envFile)) {
+$envFile = file_exists(__DIR__ . '/.env') ? __DIR__ . '/.env' : (file_exists(__DIR__ . '/../.env') ? __DIR__ . '/../.env' : null);
+
+if ($envFile && file_exists($envFile)) {
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
         if (strpos(trim($line), '#') === 0) continue;
@@ -28,10 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// Autoload classes
+// Autoload classes (supporting both local dev structure and cPanel /api/ structure)
 spl_autoload_register(function ($class) {
     $prefix = 'App\\';
-    $base_dir = __DIR__ . '/../app/';
+    $base_dir = is_dir(__DIR__ . '/app/') ? __DIR__ . '/app/' : __DIR__ . '/../app/';
 
     $len = strlen($prefix);
     if (strncmp($prefix, $class, $len) !== 0) {
@@ -42,7 +43,7 @@ spl_autoload_register(function ($class) {
     $file = $base_dir . str_replace('\\', '/', $relative_class) . '.php';
 
     if (file_exists($file)) {
-        require $file;
+        require_once $file;
     }
 });
 
