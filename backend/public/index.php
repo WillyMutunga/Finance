@@ -698,35 +698,25 @@ try {
     elseif ($uri === '/db-diag') {
         $configFile = file_exists(__DIR__ . '/../config/database.php') ? __DIR__ . '/../config/database.php' : __DIR__ . '/config/database.php';
         $config = require $configFile;
-        $candidates = [
-            'socket_tmp' => "pgsql:host=/tmp;port=5432;dbname={$config['database']}",
-            'socket_var_run' => "pgsql:host=/var/run/postgresql;port=5432;dbname={$config['database']}",
-            'socket_var_pgsql' => "pgsql:host=/var/pgsql;port=5432;dbname={$config['database']}",
-            'socket_empty' => "pgsql:dbname={$config['database']}",
-            'tcp_127' => "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']}",
-            'tcp_localhost' => "pgsql:host=localhost;port=5432;dbname={$config['database']}",
-            'tcp_ssl_req' => "pgsql:host=127.0.0.1;port=5432;dbname={$config['database']};sslmode=require",
-        ];
+        
+        $usernames = ['skysofts_sharks', 'skysofts_Sharks', 'skysofts_finance', 'skysofts'];
         $results = [];
-        foreach ($candidates as $name => $dsn) {
+        
+        foreach ($usernames as $u) {
+            $dsn = "pgsql:host=/var/run/postgresql;port=5432;dbname={$config['database']}";
             try {
-                $p = new PDO($dsn, $config['username'], $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                $p = new PDO($dsn, $u, $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
                 $stmt = $p->query("SELECT count(*) as c FROM users");
                 $r = $stmt->fetch(PDO::FETCH_ASSOC);
-                $results[$name] = ['status' => 'SUCCESS', 'user_count' => $r['c']];
+                $results[$u] = ['status' => 'SUCCESS', 'user_count' => $r['c']];
             } catch (\Throwable $ex) {
-                $results[$name] = ['status' => 'FAIL', 'error' => $ex->getMessage()];
+                $results[$u] = ['status' => 'FAIL', 'error' => $ex->getMessage()];
             }
         }
-        $sockets = array_merge((array)@glob('/tmp/.s.PGSQL*'), (array)@glob('/var/run/postgresql/.s.PGSQL*'), (array)@glob('/var/pgsql/.s.PGSQL*'));
+        
         echo json_encode([
             'results' => $results,
-            'found_sockets' => $sockets,
-            'config' => [
-                'user' => $config['username'],
-                'db' => $config['database'],
-                'driver' => $config['driver']
-            ]
+            'db' => $config['database']
         ], JSON_PRETTY_PRINT);
         exit;
     }
