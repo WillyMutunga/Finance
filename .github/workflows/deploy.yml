@@ -51,7 +51,7 @@ jobs:
           DB_HOST=localhost
           DB_PORT=5432
           DB_DATABASE=skysofts_finance
-          DB_USERNAME=skysofts_sharks
+          DB_USERNAME=skysofts_Sharks
           DB_PASSWORD=William#20
           DB_SSLMODE=prefer
           APP_ENV=production
