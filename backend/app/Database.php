@@ -38,6 +38,9 @@ class Database
                     }
                 }
             } catch (PDOException $e) {
+                if (getenv('APP_ENV') === 'production' || getenv('APP_DEBUG') === 'true') {
+                    throw new \RuntimeException("Database connection failed [{$driver}://{$config['host']}:{$config['port']}/{$config['database']}]: " . $e->getMessage(), (int)$e->getCode(), $e);
+                }
                 // Fallback for development if Postgres is not yet provisioned locally
                 $sqlitePath = sys_get_temp_dir() . '/school_finance_dev.sqlite';
                 self::$instance = new PDO("sqlite:" . $sqlitePath, null, null, [

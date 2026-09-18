@@ -48,14 +48,14 @@ jobs:
           # If .env.production exists or create a fallback template
           cat << 'EOF' > deploy_package/api/.env
           DB_CONNECTION=pgsql
-          DB_HOST=localhost
+          DB_HOST=127.0.0.1
           DB_PORT=5432
           DB_DATABASE=skysofts_finance
           DB_USERNAME=skysofts_Sharks
           DB_PASSWORD=William#20
           DB_SSLMODE=prefer
           APP_ENV=production
-          APP_DEBUG=false
+          APP_DEBUG=true
           APP_SECRET=a8f8b89c02d7e484a86e921b77cd4b9e289f81643c13e51a2d5e317c8d99042b
           EOF
 
