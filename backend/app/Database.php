@@ -14,7 +14,12 @@ class Database
     {
         if (self::$instance === null) {
             $config = require __DIR__ . '/../config/database.php';
-            $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']};sslmode={$config['sslmode']}";
+            $driver = $config['driver'] ?? 'pgsql';
+            if ($driver === 'mysql') {
+                $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4";
+            } else {
+                $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']};sslmode={$config['sslmode']}";
+            }
             
             try {
                 self::$instance = new PDO($dsn, $config['username'], $config['password'], [

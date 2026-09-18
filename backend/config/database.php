@@ -17,14 +17,18 @@ if (file_exists($envFile)) {
     }
 }
 
+$driver = getenv('DB_CONNECTION') ?: getenv('DB_DRIVER') ?: 'pgsql';
+$defaultPort = ($driver === 'mysql') ? '3306' : '5432';
+
 return [
-    'driver'    => 'pgsql',
+    'driver'    => $driver,
     'host'      => getenv('DB_HOST') ?: '127.0.0.1',
-    'port'      => getenv('DB_PORT') ?: '5432',
+    'port'      => getenv('DB_PORT') ?: $defaultPort,
     'database'  => getenv('DB_DATABASE') ?: 'finance',
     'username'  => getenv('DB_USERNAME') ?: 'postgres',
     'password'  => getenv('DB_PASSWORD') ?: 'William#20',
-    'charset'   => 'utf8',
+    'charset'   => 'utf8mb4',
     'schema'    => 'public',
     'sslmode'   => getenv('DB_SSLMODE') ?: 'prefer',
 ];
+
