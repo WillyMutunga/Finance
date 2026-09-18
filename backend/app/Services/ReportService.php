@@ -588,25 +588,123 @@ class ReportService
     }
 
     /**
-     * 5. Student Balances Per Term Matrix
+     * 5. Student Balances Per Term Matrix (Exact Zeraki Finance Model)
      */
     public function getStudentBalancesPerTerm(string $schoolId, ?string $academicYearId = null, ?string $classId = null): array
     {
         $reg = $this->getFeeRegister($schoolId, $classId);
         $records = $reg['records'];
 
-        $termMatrix = [];
-        foreach ($records as $r) {
-            $expT1 = round($r['expected'] * 0.40, 2);
-            $expT2 = round($r['expected'] * 0.30, 2);
-            $expT3 = round($r['expected'] * 0.30, 2);
+        // Get Terms for the School / Academic Year
+        $termSql = "SELECT id, name FROM terms WHERE school_id = :school_id ORDER BY start_date ASC, name ASC";
+        $termStmt = $this->db->prepare($termSql);
+        $termStmt->execute([':school_id' => $schoolId]);
+        $dbTerms = $termStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $paid = $r['paid'];
-            $paidT1 = min($expT1, $paid);
-            $rem = max(0.0, $paid - $paidT1);
-            $paidT2 = min($expT2, $rem);
-            $rem2 = max(0.0, $rem - $paidT2);
-            $paidT3 = min($expT3, $rem2);
+        if (empty($dbTerms)) {
+            $dbTerms = [
+                ['id' => 't1', 'name' => 'Term 1'],
+                ['id' => 't2', 'name' => 'Term 2'],
+                ['id' => 't3', 'name' => 'Term 3']
+            ];
+        }
+
+        // Fetch all student invoices per term
+        $invSql = "
+            SELECT student_id, term_id, COALESCE(SUM(total_billed), 0) as billed
+            FROM fee_invoices
+            WHERE school_id = :school_id
+            GROUP BY student_id, term_id
+        ";
+        $invStmt = $this->db->prepare($invSql);
+        $invStmt->execute([':school_id' => $schoolId]);
+        $rawInvoices = $invStmt->fetchAll(PDO::FETCH_ASSOC);
+        $studentTermInvoices = [];
+        foreach ($rawInvoices as $ri) {
+            $studentTermInvoices[$ri['student_id']][$ri['term_id']] = (float)$ri['billed'];
+        }
+
+        // Fetch all student receipts per term
+        $recSql = "
+            SELECT r.student_id, COALESCE(tl.term_id, (SELECT id FROM terms WHERE school_id = :school_id ORDER BY start_date ASC LIMIT 1)) as term_id, COALESCE(SUM(r.amount), 0) as paid
+            FROM receipts r
+            LEFT JOIN transaction_ledger tl ON r.ledger_entry_id = tl.id
+            WHERE r.school_id = :school_id
+            GROUP BY r.student_id, tl.term_id
+        ";
+        $recStmt = $this->db->prepare($recSql);
+        $recStmt->execute([':school_id' => $schoolId]);
+        $rawReceipts = $recStmt->fetchAll(PDO::FETCH_ASSOC);
+        $studentTermReceipts = [];
+        foreach ($rawReceipts as $rr) {
+            $studentTermReceipts[$rr['student_id']][$rr['term_id']] = (float)$rr['paid'];
+        }
+
+        $termMatrix = [];
+        $studentsList = [];
+
+        foreach ($records as $r) {
+            $stId = $r['student_id'];
+            $runningOpening = (float)($r['opening_balance'] ?? 0.0);
+            $studentTerms = [];
+
+            // If no term-specific invoices exist, distribute billed amount across terms
+            $hasSpecificTerms = !empty($studentTermInvoices[$stId]);
+
+            $idx = 0;
+            $tBilled = [0.0, 0.0, 0.0];
+            $tPaid = [0.0, 0.0, 0.0];
+
+            foreach ($dbTerms as $t) {
+                $termId = $t['id'];
+                $termNameUpper = strtoupper($t['name']) . ' 2026';
+
+                if ($hasSpecificTerms) {
+                    $billed = $studentTermInvoices[$stId][$termId] ?? 0.0;
+                    $paid = $studentTermReceipts[$stId][$termId] ?? 0.0;
+                } else {
+                    // Fallback distribution
+                    $weights = [0.40, 0.30, 0.30];
+                    $w = $weights[$idx % 3];
+                    $billed = round($r['expected'] * $w, 2);
+                    $totPaid = $r['paid'];
+                    if ($idx === 0) {
+                        $paid = min($billed, $totPaid);
+                    } elseif ($idx === 1) {
+                        $paid = min($billed, max(0.0, $totPaid - round($r['expected'] * 0.40, 2)));
+                    } else {
+                        $paid = min($billed, max(0.0, $totPaid - round($r['expected'] * 0.70, 2)));
+                    }
+                }
+
+                $closing = $runningOpening + $billed - $paid;
+
+                $studentTerms[] = [
+                    'term_id'         => $termId,
+                    'term_name'       => $termNameUpper,
+                    'opening_balance' => $runningOpening,
+                    'invoices'        => $billed,
+                    'receipts'        => $paid,
+                    'closing_balance' => $closing
+                ];
+
+                if ($idx < 3) {
+                    $tBilled[$idx] = $billed;
+                    $tPaid[$idx] = $paid;
+                }
+
+                $runningOpening = $closing;
+                $idx++;
+            }
+
+            $studentsList[] = [
+                'id'               => $r['id'],
+                'student_id'       => $r['student_id'],
+                'admission_number' => $r['admission_number'],
+                'name'             => $r['name'],
+                'class'            => $r['class'],
+                'terms'            => $studentTerms
+            ];
 
             $termMatrix[] = [
                 'id'         => $r['id'],
@@ -614,63 +712,138 @@ class ReportService
                 'adm'        => $r['admission_number'],
                 'name'       => $r['name'],
                 'class'      => $r['class'],
-                't1_billed'  => $expT1,
-                't1_paid'    => $paidT1,
-                't1_bal'     => $expT1 - $paidT1,
-                't2_billed'  => $expT2,
-                't2_paid'    => $paidT2,
-                't2_bal'     => $expT2 - $paidT2,
-                't3_billed'  => $expT3,
-                't3_paid'    => $paidT3,
-                't3_bal'     => $expT3 - $paidT3,
+                't1_billed'  => $tBilled[0],
+                't1_paid'    => $tPaid[0],
+                't1_bal'     => $tBilled[0] - $tPaid[0],
+                't2_billed'  => $tBilled[1],
+                't2_paid'    => $tPaid[1],
+                't2_bal'     => $tBilled[1] - $tPaid[1],
+                't3_billed'  => $tBilled[2],
+                't3_paid'    => $tPaid[2],
+                't3_bal'     => $tBilled[2] - $tPaid[2],
                 'total_bal'  => $r['balance']
             ];
         }
 
         return [
-            'matrix'  => $termMatrix,
-            'summary' => $reg['summary']
+            'students' => $studentsList,
+            'matrix'   => $termMatrix,
+            'summary'  => $reg['summary']
         ];
     }
 
     /**
-     * 6. Student Vote Head Balances
+     * 6. Student Vote Head Balances (Exact Multi-Column Zeraki Format)
      */
     public function getStudentVoteHeadBalances(string $schoolId, ?string $classId = null): array
     {
-        $stmtVH = $this->db->prepare("SELECT * FROM vote_heads WHERE school_id = :school_id ORDER BY name ASC");
+        $stmtVH = $this->db->prepare("SELECT id, name, account_code FROM vote_heads WHERE school_id = :school_id ORDER BY name ASC");
         $stmtVH->execute([':school_id' => $schoolId]);
-        $voteHeads = $stmtVH->fetchAll(PDO::FETCH_ASSOC);
+        $dbVoteHeads = $stmtVH->fetchAll(PDO::FETCH_ASSOC);
 
-        if (empty($voteHeads)) {
-            $voteHeads = [
-                ['id' => '1', 'name' => 'Tuition & Teaching Materials', 'amount' => 4500],
-                ['id' => '2', 'name' => 'Boarding & Catering', 'amount' => 18000],
-                ['id' => '3', 'name' => 'Repairs, Maintenance & Improvement (RMI)', 'amount' => 2000],
-                ['id' => '4', 'name' => 'Electricity, Water & Conservancy (EWC)', 'amount' => 3000],
-                ['id' => '5', 'name' => 'Activity & Sports Fees', 'amount' => 1500],
-                ['id' => '6', 'name' => 'Local Transport & Travel (LT&T)', 'amount' => 1200],
-                ['id' => '7', 'name' => 'Medical & Insurance', 'amount' => 800]
+        if (empty($dbVoteHeads)) {
+            $dbVoteHeads = [
+                ['id' => '1', 'name' => 'LUNCH', 'account_code' => 'LUNCH'],
+                ['id' => '2', 'name' => 'EWC', 'account_code' => 'EWC'],
+                ['id' => '3', 'name' => 'LTT', 'account_code' => 'LTT'],
+                ['id' => '4', 'name' => 'PE', 'account_code' => 'PE'],
+                ['id' => '5', 'name' => 'BES', 'account_code' => 'BES'],
+                ['id' => '6', 'name' => 'TUITION', 'account_code' => 'TUITION']
             ];
         }
 
+        $voteHeadNames = [];
+        foreach ($dbVoteHeads as $vh) {
+            $name = strtoupper(trim(explode('(', $vh['name'])[0]));
+            if (!in_array($name, $voteHeadNames)) {
+                $voteHeadNames[] = $name;
+            }
+        }
+
+        // Query actual invoice breakdown per student per vote head
+        $invVhSql = "
+            SELECT 
+                fi.student_id,
+                vh.name as vote_head_name,
+                COALESCE(SUM(fsi.amount), 0) as expected_amount
+            FROM fee_invoices fi
+            JOIN fee_structure_items fsi ON fi.fee_structure_id = fsi.fee_structure_id
+            JOIN vote_heads vh ON fsi.vote_head_id = vh.id
+            WHERE fi.school_id = :school_id
+            GROUP BY fi.student_id, vh.name
+        ";
+        $stmtInvVh = $this->db->prepare($invVhSql);
+        $stmtInvVh->execute([':school_id' => $schoolId]);
+        $rawInvVh = $stmtInvVh->fetchAll(PDO::FETCH_ASSOC);
+
+        $studentVhExpected = [];
+        foreach ($rawInvVh as $row) {
+            $vName = strtoupper(trim(explode('(', $row['vote_head_name'])[0]));
+            $studentVhExpected[$row['student_id']][$vName] = (float)$row['expected_amount'];
+        }
+
         $reg = $this->getFeeRegister($schoolId, $classId);
+        $records = $reg['records'];
+
+        $studentsList = [];
+        foreach ($records as $r) {
+            $stId = $r['student_id'];
+            $totBilled = (float)$r['expected'];
+            $totPaid = (float)$r['paid'];
+
+            $vhMap = [];
+            $hasInvoiceItems = !empty($studentVhExpected[$stId]);
+
+            foreach ($voteHeadNames as $vhName) {
+                if ($hasInvoiceItems) {
+                    $exp = $studentVhExpected[$stId][$vhName] ?? 0.0;
+                } else {
+                    // Proportional distribution if no itemized structure
+                    $exp = count($voteHeadNames) > 0 ? round($totBilled / count($voteHeadNames), 2) : 0.0;
+                }
+
+                // Allocate paid proportionally based on expected ratio
+                if ($totBilled > 0 && $exp > 0) {
+                    $ratio = $exp / $totBilled;
+                    $paid = min($exp, round($totPaid * $ratio, 2));
+                } else {
+                    $paid = 0.0;
+                }
+
+                $bal = max(0.0, $exp - $paid);
+
+                $vhMap[$vhName] = [
+                    'expected' => $exp,
+                    'paid'     => $paid,
+                    'balance'  => $bal
+                ];
+            }
+
+            $studentsList[] = [
+                'id'               => $r['id'],
+                'student_id'       => $r['student_id'],
+                'admission_number' => $r['admission_number'],
+                'name'             => $r['name'],
+                'class'            => $r['class'],
+                'vote_heads'       => $vhMap
+            ];
+        }
+
+        // Also build the vote head summary for backwards compatibility
+        $vhBreakdown = [];
         $totExpected = $reg['summary']['total_expected'];
         $totPaid = $reg['summary']['total_paid'];
-        $totBalance = $reg['summary']['total_balance'];
+        $allocatedWeight = count($voteHeadNames) > 0 ? (1.0 / count($voteHeadNames)) : 1.0;
 
-        $vhBreakdown = [];
-        $allocatedWeight = count($voteHeads) > 0 ? (1.0 / count($voteHeads)) : 1.0;
-
-        foreach ($voteHeads as $vh) {
+        foreach ($voteHeadNames as $vhn) {
             $exp = round($totExpected * $allocatedWeight, 2);
             $col = round($totPaid * $allocatedWeight, 2);
             $bal = $exp - $col;
             $rate = $exp > 0 ? round(($col / $exp) * 100, 1) : 0.0;
 
             $vhBreakdown[] = [
-                'id'              => $vh['id'],
-                'vote_head'       => $vh['name'],
+                'id'              => $vhn,
+                'vote_head'       => $vhn,
                 'expected'        => $exp,
                 'collected'       => $col,
                 'balance'         => $bal,
@@ -679,8 +852,10 @@ class ReportService
         }
 
         return [
-            'vote_heads' => $vhBreakdown,
-            'summary'    => $reg['summary']
+            'vote_heads_columns' => $voteHeadNames,
+            'students'           => $studentsList,
+            'vote_heads'         => $vhBreakdown,
+            'summary'            => $reg['summary']
         ];
     }
 
@@ -914,7 +1089,8 @@ class ReportService
                 'note_7' => ['title' => '7. REPAIRS, MAINTENANCE & IMPROVEMENT (RMI)', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00],
                 'note_8' => ['title' => '8. LOCAL TRANSPORT & TRAVEL (LT&T)', 'current' => round($totSpent * 0.10, 2), 'prior' => 0.00],
                 'note_9' => ['title' => '9. ADMINISTRATIVE & RUNNING EXPENSES', 'current' => round($totSpent * 0.20, 2), 'prior' => 0.00],
-                'note_10'=> ['title' => '10. BOARDING & CATERING EXPENSES', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00]
+                'note_10'=> ['title' => '10. BOARDING & CATERING EXPENSES', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00],
+                'note_19'=> ['title' => '19. STOCK/ INVENTORY', 'current' => 0.00, 'prior' => 0.00]
             ],
             'statement_of_receipts_and_payments' => [
                 'total_receipts'  => $totalReceipts,

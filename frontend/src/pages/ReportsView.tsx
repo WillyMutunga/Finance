@@ -82,7 +82,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
     records: []
   });
   const [termBalances, setTermBalances] = useState<any[]>([]);
+  const [balancesPerTermStudents, setBalancesPerTermStudents] = useState<any[]>([]);
+  const [balancesPerTermMode, setBalancesPerTermMode] = useState<'year' | 'current_term'>('year');
+  const [selectedTermStudentIds, setSelectedTermStudentIds] = useState<string[]>([]);
+
   const [studentVoteHeadBalances, setStudentVoteHeadBalances] = useState<any[]>([]);
+  const [voteHeadColumns, setVoteHeadColumns] = useState<string[]>([]);
+  const [voteHeadStudents, setVoteHeadStudents] = useState<any[]>([]);
+  const [selectedVoteHeadStudentIds, setSelectedVoteHeadStudentIds] = useState<string[]>([]);
+
   const [showSMSModal, setShowSMSModal] = useState(false);
   const [selectedStudentForStatement, setSelectedStudentForStatement] = useState<string | null>(null);
 
@@ -162,12 +170,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
           const res = await ApiService.getStudentBalancesPerTerm({ class_id: selectedClassId });
           if (res && res.data) {
             setTermBalances(res.data.matrix || []);
+            setBalancesPerTermStudents(res.data.students || []);
             setFeeRegisterData(prev => ({ ...prev, summary: res.data.summary || prev.summary }));
           }
         } else if (studentSubTab === 'Vote Head Balances') {
           const res = await ApiService.getStudentVoteHeadBalances(selectedClassId);
           if (res && res.data) {
             setStudentVoteHeadBalances(res.data.vote_heads || []);
+            setVoteHeadColumns(res.data.vote_heads_columns || []);
+            setVoteHeadStudents(res.data.students || []);
             setFeeRegisterData(prev => ({ ...prev, summary: res.data.summary || prev.summary }));
           }
         } else if (studentSubTab === 'Statements') {
@@ -471,53 +482,182 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
               </div>
             )}
 
-            {/* TAB 2: Balances Per Term Matrix */}
+            {/* TAB 2: Balances Per Term (Exact Zeraki Finance Model) */}
             {studentSubTab === 'Balances Per Term' && (
-              <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                    <tr>
-                      <th className="py-3 px-3 w-8">#</th>
-                      <th className="py-3 px-3">Adm No</th>
-                      <th className="py-3 px-4">Student Name</th>
-                      <th className="py-3 px-3">Class</th>
-                      <th className="py-3 px-3 text-right">T1 Billed</th>
-                      <th className="py-3 px-3 text-right">T1 Paid</th>
-                      <th className="py-3 px-3 text-right">T2 Billed</th>
-                      <th className="py-3 px-3 text-right">T2 Paid</th>
-                      <th className="py-3 px-3 text-right">T3 Billed</th>
-                      <th className="py-3 px-3 text-right">T3 Paid</th>
-                      <th className="py-3 px-3 text-right">Net Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700 font-mono text-[11px]">
-                    {termBalances.length === 0 ? (
+              <div className="space-y-3">
+                {/* Action & Toggle Controls */}
+                <div className="flex items-center justify-between">
+                  {/* Toggle Pill on Left */}
+                  <div className="inline-flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-xs">
+                    <button
+                      onClick={() => setBalancesPerTermMode('year')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                        balancesPerTermMode === 'year'
+                          ? 'bg-[#e0f2fe] text-[#0284c7] font-bold border border-[#bae6fd]'
+                          : 'text-slate-600 hover:text-slate-900 border border-transparent'
+                      }`}
+                    >
+                      {balancesPerTermMode === 'year' && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+                      <span>By Academic Year</span>
+                    </button>
+                    <button
+                      onClick={() => setBalancesPerTermMode('current_term')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+                        balancesPerTermMode === 'current_term'
+                          ? 'bg-[#e0f2fe] text-[#0284c7] font-bold border border-[#bae6fd]'
+                          : 'text-slate-600 hover:text-slate-900 border border-transparent'
+                      }`}
+                    >
+                      {balancesPerTermMode === 'current_term' && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+                      <span>Current Term</span>
+                    </button>
+                  </div>
+
+                  {/* Top Right Action Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => window.print()}
+                      className="p-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg cursor-pointer transition-colors shadow-xs"
+                      title="Print Balances Per Term"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const rows: any[] = [];
+                        balancesPerTermStudents.forEach((st) => {
+                          st.terms.forEach((t: any, idx: number) => {
+                            rows.push([
+                              idx === 0 ? st.id : '',
+                              idx === 0 ? st.admission_number : '',
+                              idx === 0 ? st.name : '',
+                              idx === 0 ? st.class : '',
+                              t.term_name,
+                              t.opening_balance,
+                              t.invoices,
+                              t.receipts,
+                              t.closing_balance
+                            ]);
+                          });
+                        });
+                        exportToCsv('Balances_Per_Term_Report', ['#', 'Adm No', 'Name', 'Class', 'Term', 'Opening Balance', 'Invoices', 'Receipts', 'Closing Balance'], rows);
+                      }}
+                      className="p-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg cursor-pointer transition-colors shadow-xs"
+                      title="Export to Spreadsheet"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {}}
+                      className="px-3 py-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg font-semibold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Filter className="w-3.5 h-3.5" />
+                      <span>Filter</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/90 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
                       <tr>
-                        <td colSpan={11} className="py-16 text-center text-slate-400 font-sans">
-                          No multi-term balance records found.
-                        </td>
+                        <th className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={balancesPerTermStudents.length > 0 && selectedTermStudentIds.length === balancesPerTermStudents.length}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedTermStudentIds(balancesPerTermStudents.map(s => s.student_id));
+                              else setSelectedTermStudentIds([]);
+                            }}
+                            className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-3 px-3 w-8">#</th>
+                        <th className="py-3 px-3">Adm No</th>
+                        <th className="py-3 px-4">Name</th>
+                        <th className="py-3 px-3">Class</th>
+                        <th className="py-3 px-3">Term</th>
+                        <th className="py-3 px-3 text-right">Opening Balance</th>
+                        <th className="py-3 px-3 text-right">Invoices</th>
+                        <th className="py-3 px-3 text-right">Receipts</th>
+                        <th className="py-3 px-3 text-right">Closing Balance</th>
+                        <th className="py-3 px-3 text-center">Actions</th>
                       </tr>
-                    ) : (
-                      termBalances.map((r) => (
-                        <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-3 text-slate-400 font-sans">{r.id}</td>
-                          <td className="py-3 px-3 font-semibold text-slate-900">{r.adm}</td>
-                          <td className="py-3 px-4 font-bold text-slate-900 uppercase font-sans">{r.name}</td>
-                          <td className="py-3 px-3 text-slate-600 font-sans">{r.class}</td>
-                          <td className="py-3 px-3 text-right">{formatCurrency(r.t1_billed)}</td>
-                          <td className="py-3 px-3 text-right text-emerald-700">{formatCurrency(r.t1_paid)}</td>
-                          <td className="py-3 px-3 text-right">{formatCurrency(r.t2_billed)}</td>
-                          <td className="py-3 px-3 text-right text-emerald-700">{formatCurrency(r.t2_paid)}</td>
-                          <td className="py-3 px-3 text-right">{formatCurrency(r.t3_billed)}</td>
-                          <td className="py-3 px-3 text-right text-emerald-700">{formatCurrency(r.t3_paid)}</td>
-                          <td className={`py-3 px-3 text-right font-bold ${r.total_bal <= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                            {formatCurrency(r.total_bal)}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-700 text-[11px]">
+                      {balancesPerTermStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className="py-16 text-center text-slate-400 font-sans">
+                            No multi-term balance records found.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        balancesPerTermStudents.map((st, sIdx) => {
+                          const termsToShow = balancesPerTermMode === 'current_term' ? st.terms.slice(0, 1) : st.terms;
+                          const isSelected = selectedTermStudentIds.includes(st.student_id);
+                          const groupBg = sIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40';
+
+                          return (
+                            <React.Fragment key={st.student_id || sIdx}>
+                              {termsToShow.map((t: any, tIdx: number) => (
+                                <tr
+                                  key={`${st.student_id}_${tIdx}`}
+                                  className={`${groupBg} hover:bg-slate-100/70 transition-colors ${tIdx === termsToShow.length - 1 ? 'border-b border-slate-200' : ''}`}
+                                >
+                                  {/* Checkbox only on row 1 */}
+                                  <td className="py-2.5 px-3">
+                                    {tIdx === 0 && (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedTermStudentIds(prev => [...prev, st.student_id]);
+                                          else setSelectedTermStudentIds(prev => prev.filter(id => id !== st.student_id));
+                                        }}
+                                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                      />
+                                    )}
+                                  </td>
+                                  {/* Index only on row 1 */}
+                                  <td className="py-2.5 px-3 text-slate-600 font-sans">{tIdx === 0 ? st.id : ''}</td>
+                                  {/* Adm No only on row 1 */}
+                                  <td className="py-2.5 px-3 font-semibold text-slate-900 font-mono">{tIdx === 0 ? st.admission_number : ''}</td>
+                                  {/* Name only on row 1 */}
+                                  <td className="py-2.5 px-4 font-bold text-slate-900 uppercase font-sans">{tIdx === 0 ? st.name : ''}</td>
+                                  {/* Class only on row 1 */}
+                                  <td className="py-2.5 px-3 text-slate-600 font-sans">{tIdx === 0 ? st.class : ''}</td>
+                                  {/* Term name */}
+                                  <td className="py-2.5 px-3 font-semibold text-slate-800 uppercase text-[11px] whitespace-nowrap">{t.term_name}</td>
+                                  {/* Opening Balance */}
+                                  <td className="py-2.5 px-3 text-right font-mono text-slate-800">{formatCurrency(t.opening_balance)}</td>
+                                  {/* Invoices */}
+                                  <td className="py-2.5 px-3 text-right font-mono text-slate-800">{formatCurrency(t.invoices)}</td>
+                                  {/* Receipts */}
+                                  <td className="py-2.5 px-3 text-right font-mono text-slate-800">{formatCurrency(t.receipts)}</td>
+                                  {/* Closing Balance */}
+                                  <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(t.closing_balance)}</td>
+                                  {/* Actions dropdown button on row 1 */}
+                                  <td className="py-2.5 px-3 text-center">
+                                    {tIdx === 0 && (
+                                      <button
+                                        onClick={() => setSelectedStudentForStatement(st.student_id)}
+                                        className="px-2.5 py-0.5 border border-emerald-500 text-emerald-600 hover:bg-emerald-50 rounded-md font-semibold text-[11px] inline-flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                                      >
+                                        <span>Action</span>
+                                        <ChevronDown className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -564,39 +704,151 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
               </div>
             )}
 
-            {/* TAB 4: Vote Head Balances */}
+            {/* TAB 4: Vote Head Balances (Exact Multi-Column Zeraki Model) */}
             {studentSubTab === 'Vote Head Balances' && (
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                    <tr>
-                      <th className="py-3 px-4">Vote Head</th>
-                      <th className="py-3 px-4 text-right">Expected (KES)</th>
-                      <th className="py-3 px-4 text-right">Collected (KES)</th>
-                      <th className="py-3 px-4 text-right">Balance (KES)</th>
-                      <th className="py-3 px-4 text-right">Collection Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
-                    {studentVoteHeadBalances.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-slate-400 font-sans">
-                          No vote head balance allocations available.
-                        </td>
-                      </tr>
-                    ) : (
-                      studentVoteHeadBalances.map((vh) => (
-                        <tr key={vh.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4 font-sans font-bold text-slate-900">{vh.vote_head}</td>
-                          <td className="py-3 px-4 text-right">{formatCurrency(vh.expected)}</td>
-                          <td className="py-3 px-4 text-right text-emerald-700 font-semibold">{formatCurrency(vh.collected)}</td>
-                          <td className="py-3 px-4 text-right text-rose-600">{formatCurrency(vh.balance)}</td>
-                          <td className="py-3 px-4 text-right font-bold text-emerald-800">{vh.collection_rate}%</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {/* Header with Title and Action Buttons */}
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-base text-slate-800">Vote Head Balances</h3>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => window.print()}
+                      className="p-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg cursor-pointer transition-colors shadow-xs"
+                      title="Print Vote Head Balances"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        const vhCols = voteHeadColumns.length > 0 ? voteHeadColumns : ['LUNCH', 'EWC', 'LTT', 'PE', 'BES'];
+                        const headers = ['#', 'Student', 'Adm No', 'Class'];
+                        vhCols.forEach(vh => {
+                          headers.push(`${vh} Expected`, `${vh} Paid`, `${vh} Balance`);
+                        });
+                        const rows = voteHeadStudents.map(st => {
+                          const row = [st.id, st.name, st.admission_number, st.class];
+                          vhCols.forEach(vh => {
+                            const b = st.vote_heads?.[vh] || { expected: 0, paid: 0, balance: 0 };
+                            row.push(b.expected, b.paid, b.balance);
+                          });
+                          return row;
+                        });
+                        exportToCsv('Vote_Head_Balances_Report', headers, rows);
+                      }}
+                      className="p-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg cursor-pointer transition-colors shadow-xs"
+                      title="Export to Spreadsheet"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {}}
+                      className="px-3 py-1.5 bg-[#f0f9ff] hover:bg-sky-100 text-[#0284c7] border border-[#bae6fd] rounded-lg font-semibold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Filter className="w-3.5 h-3.5" />
+                      <span>Filter</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Multi-tier Table */}
+                <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-sm bg-white">
+                  {(() => {
+                    const vhCols = voteHeadColumns.length > 0
+                      ? voteHeadColumns
+                      : ['LUNCH', 'EWC', 'LTT', 'PE', 'BES'];
+
+                    return (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-50/90 text-slate-700 text-[11px] font-bold border-b border-slate-200">
+                          {/* Row 1: Main Headers */}
+                          <tr className="border-b border-slate-200">
+                            <th rowSpan={2} className="py-2.5 px-3 w-8 border-r border-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={voteHeadStudents.length > 0 && selectedVoteHeadStudentIds.length === voteHeadStudents.length}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedVoteHeadStudentIds(voteHeadStudents.map(s => s.student_id));
+                                  else setSelectedVoteHeadStudentIds([]);
+                                }}
+                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </th>
+                            <th rowSpan={2} className="py-2.5 px-3 w-8 border-r border-slate-200 text-center">#</th>
+                            <th rowSpan={2} className="py-2.5 px-4 border-r border-slate-200 min-w-[200px]">Student</th>
+                            {vhCols.map((vh) => (
+                              <th key={vh} colSpan={3} className="py-2 px-3 text-center border-r border-slate-200 font-bold uppercase tracking-wider text-slate-900 bg-slate-100/60">
+                                {vh}
+                              </th>
+                            ))}
+                          </tr>
+
+                          {/* Row 2: Sub-headers */}
+                          <tr className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-50">
+                            {vhCols.map((vh) => (
+                              <React.Fragment key={`sub_${vh}`}>
+                                <th className="py-2 px-3 text-right border-r border-slate-100 font-semibold">Expected</th>
+                                <th className="py-2 px-3 text-right border-r border-slate-100 font-semibold">Paid</th>
+                                <th className="py-2 px-3 text-right border-r border-slate-200 font-semibold">Balance</th>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        </thead>
+
+                        <tbody className="divide-y divide-slate-100 font-mono text-[11px] text-slate-800">
+                          {voteHeadStudents.length === 0 ? (
+                            <tr>
+                              <td colSpan={3 + vhCols.length * 3} className="py-16 text-center text-slate-400 font-sans">
+                                No student vote head balance allocations available.
+                              </td>
+                            </tr>
+                          ) : (
+                            voteHeadStudents.map((st, idx) => {
+                              const isSelected = selectedVoteHeadStudentIds.includes(st.student_id);
+                              const isEven = idx % 2 === 0;
+
+                              return (
+                                <tr key={st.student_id || idx} className={`${isEven ? 'bg-white' : 'bg-slate-50/50'} hover:bg-slate-100/70 transition-colors`}>
+                                  <td className="py-3 px-3 border-r border-slate-100">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) setSelectedVoteHeadStudentIds(prev => [...prev, st.student_id]);
+                                        else setSelectedVoteHeadStudentIds(prev => prev.filter(id => id !== st.student_id));
+                                      }}
+                                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="py-3 px-3 border-r border-slate-100 text-slate-500 font-sans text-center">{st.id || idx + 1}</td>
+                                  <td className="py-3 px-4 border-r border-slate-100 font-sans">
+                                    <div className="font-bold text-slate-900 uppercase text-xs">{st.name}</div>
+                                    <div className="text-[11px] text-slate-500">Adm No. {st.admission_number}· {st.class}</div>
+                                  </td>
+                                  {vhCols.map((vh) => {
+                                    const b = st.vote_heads?.[vh] || { expected: 0, paid: 0, balance: 0 };
+                                    return (
+                                      <React.Fragment key={`cell_${st.student_id}_${vh}`}>
+                                        <td className="py-3 px-3 text-right border-r border-slate-100 text-slate-800">
+                                          {b.expected > 0 ? Number(b.expected).toLocaleString('en-KE') : '0'}
+                                        </td>
+                                        <td className="py-3 px-3 text-right border-r border-slate-100 text-slate-800">
+                                          {b.paid > 0 ? Number(b.paid).toLocaleString('en-KE') : '0'}
+                                        </td>
+                                        <td className="py-3 px-3 text-right border-r border-slate-200 font-semibold text-slate-900">
+                                          {b.balance > 0 ? Number(b.balance).toLocaleString('en-KE') : '0'}
+                                        </td>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                </div>
               </div>
             )}
           </div>
@@ -1571,10 +1823,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
               </p>
             </div>
 
-            {/* IPSAS SUB-VIEW: Notes 1-10 */}
+            {/* IPSAS SUB-VIEW: Notes 1-18 */}
             {ipsasSubTab === 'Notes' && ipsasData?.notes && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.keys(ipsasData.notes).map((k) => {
+                {Object.keys(ipsasData.notes).filter(k => k !== 'note_19').map((k) => {
                   const note = ipsasData.notes[k];
                   return (
                     <div key={k} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -1662,6 +1914,77 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
                 </table>
               </div>
             )}
+
+            {/* Note 19: STOCK / INVENTORY (Screenshot 1) & Official 3-Signature Section */}
+            <div className="mt-8 space-y-6 pt-4 border-t border-slate-200">
+              <div className="space-y-2">
+                <h3 className="font-bold text-xs text-slate-900 uppercase tracking-wide">
+                  19. STOCK/ INVENTORY
+                </h3>
+
+                {/* Blue Summary Table */}
+                <div className="border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#0284c7] text-white font-bold">
+                      <tr>
+                        <th className="py-2.5 px-4 font-sans text-xs">Description</th>
+                        <th className="py-2.5 px-4 text-right font-sans text-xs">
+                          <div>{financialYear}</div>
+                          <div className="text-[10px] font-normal tracking-wider">KES</div>
+                        </th>
+                        <th className="py-2.5 px-4 text-right font-sans text-xs">
+                          <div>-</div>
+                          <div className="text-[10px] font-normal tracking-wider">KES</div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono text-[11px] bg-white">
+                      <tr>
+                        <td className="py-2.5 px-4 font-sans font-bold text-slate-900">Total</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">0</td>
+                        <td className="py-2.5 px-4 text-right font-bold text-slate-900">0</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-b border-slate-300/80 my-6"></div>
+
+              {/* Approval Text & 3-Column Sign-Off */}
+              <div className="space-y-6 pb-6">
+                <p className="text-xs text-slate-800 font-medium">
+                  This school&apos;s financial statements were approved on ......................................... and signed by:
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+                  {/* 1. Chair BOM */}
+                  <div className="space-y-1.5">
+                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                    <div className="font-bold text-xs text-slate-900">Name:</div>
+                    <div className="font-bold text-xs text-slate-900">Chair BOM</div>
+                    <div className="font-bold text-xs text-slate-900">Date:</div>
+                  </div>
+
+                  {/* 2. School Principal / Secretary to BOM */}
+                  <div className="space-y-1.5">
+                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                    <div className="font-bold text-xs text-slate-900">Name:</div>
+                    <div className="font-bold text-xs text-slate-900">School Principal/ Secretary to BOM</div>
+                    <div className="font-bold text-xs text-slate-900">Date:</div>
+                  </div>
+
+                  {/* 3. Bursar / Finance Officer */}
+                  <div className="space-y-1.5">
+                    <div className="border-b border-dotted border-slate-800 w-full mb-2"></div>
+                    <div className="font-bold text-xs text-slate-900">Name:</div>
+                    <div className="font-bold text-xs text-slate-900">Bursar/ Finance Officer</div>
+                    <div className="font-bold text-xs text-slate-900">Date:</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
