@@ -258,6 +258,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
     return val.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const formatVal = (amt: number | string | undefined | null) => {
+    if (amt === null || amt === undefined || amt === '') return '0';
+    const val = Number(amt);
+    if (isNaN(val)) return '0';
+    if (val === 0) return '0';
+    return val.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  };
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto text-slate-800 text-xs font-sans">
       {/* Top Main Category Switcher (Skysoft Finance Style) */}
@@ -1770,67 +1778,136 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
       {activeSubTab === 'ipsas-reports' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-[640px] flex flex-col">
           {/* Top Sub-tabs Bar */}
-          <div className="border-b border-slate-200 px-4 flex items-center justify-between overflow-x-auto text-xs font-semibold text-slate-600 bg-white">
-            <div className="flex items-center gap-6">
+          <div className="border-b border-slate-200 px-6 flex items-center justify-between overflow-x-auto text-xs font-semibold text-slate-600 bg-white">
+            <div className="flex items-center gap-8">
               {(['Notes', 'Receipts And Payments', 'Financial Assets and Liabilities', 'Cash Flow Statement', 'Appropriation'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setIpsasSubTab(tab)}
-                  className={`py-3.5 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`py-3.5 border-b-2 flex items-center gap-2 transition-colors whitespace-nowrap cursor-pointer text-xs font-medium ${
                     ipsasSubTab === tab
-                      ? 'border-sky-600 text-sky-800 font-bold'
+                      ? 'border-emerald-600 text-slate-900 font-bold'
                       : 'border-transparent text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  <Building className="w-3.5 h-3.5" />
+                  {tab === 'Cash Flow Statement' ? (
+                    <FileText className="w-4 h-4 text-slate-600" />
+                  ) : tab === 'Notes' ? (
+                    <BookOpen className="w-4 h-4 text-slate-600" />
+                  ) : (
+                    <FileSpreadsheet className="w-4 h-4 text-slate-600" />
+                  )}
                   <span>{tab}</span>
                 </button>
               ))}
             </div>
-
-            <div className="flex items-center gap-2 py-2">
-              <select
-                value={financialYear}
-                onChange={(e) => setFinancialYear(e.target.value)}
-                className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none cursor-pointer"
-              >
-                <option value="2026/2027">FY 2026/2027</option>
-                <option value="2025/2026">FY 2025/2026</option>
-              </select>
-              <button
-                onClick={() => window.print()}
-                className="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg shadow-sm cursor-pointer"
-                title="Print Report"
-              >
-                <Printer className="w-4 h-4 text-slate-500" />
-              </button>
-              <button
-                onClick={handleRefresh}
-                className="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg shadow-sm cursor-pointer"
-                title="Refresh"
-              >
-                <RotateCw className={`w-4 h-4 text-slate-500 ${refreshing ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
           </div>
 
-          <div className="p-5 flex-1 space-y-4">
-            {/* Official Heading */}
-            <div className="text-center py-2 border-b border-slate-200/60 space-y-1">
-              <h2 className="font-extrabold text-base text-slate-900 tracking-wide uppercase">NDUUNDUNE SECONDARY SCHOOL</h2>
-              <p className="text-xs font-bold text-sky-800 uppercase tracking-wider">
-                PUBLIC SECTOR IPSAS FINANCIAL STATEMENTS - {financialYear}
-              </p>
+          <div className="p-6 flex-1 space-y-6">
+            {/* Top Controls Row */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-slate-400 font-medium mb-0.5">Financial Year</div>
+                <select
+                  value={financialYear}
+                  onChange={(e) => setFinancialYear(e.target.value)}
+                  className="text-xs font-bold text-sky-600 bg-transparent outline-none cursor-pointer hover:underline p-0 m-0"
+                >
+                  <option value="2026/2027">2026/2027 ∨</option>
+                  <option value="2025/2026">2025/2026 ∨</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="p-2 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-600 rounded-lg shadow-sm cursor-pointer"
+                  title="Print Report"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (ipsasSubTab === 'Receipts And Payments') {
+                      const headers = ['DESCRIPTION OF VOTE HEAD', 'NOTE', `${financialYear} Kshs`, '- Kshs'];
+                      const rows = [
+                        ['RECEIPTS', '', '', ''],
+                        ['Government Grants For Tuition', '1', ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_tuition?.amount || 0, '-'],
+                        ['Government Grants For Operations', '2', ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_operations?.amount || 0, '-'],
+                        ['Government Grants For Infrastructure', '3', ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_infrastructure?.amount || 0, '-'],
+                        ['School Fund Income- Parents\' Contributions', '4', ipsasData?.statement_of_receipts_and_payments?.receipts?.parents_contributions?.amount || 0, '-'],
+                        ['Miscellaneous Incomes', '5', ipsasData?.statement_of_receipts_and_payments?.receipts?.miscellaneous?.amount || 0, '-'],
+                        ['Total receipts', '', ipsasData?.statement_of_receipts_and_payments?.total_receipts || 0, '-'],
+                        ['PAYMENTS', '', '', ''],
+                        ['Tuition', '6', ipsasData?.statement_of_receipts_and_payments?.payments?.tuition?.amount || 0, '-'],
+                        ['Operations', '7', ipsasData?.statement_of_receipts_and_payments?.payments?.operations?.amount || 0, '-'],
+                        ['Infrastructure', '8', ipsasData?.statement_of_receipts_and_payments?.payments?.infrastructure?.amount || 0, '-'],
+                        ['Boarding And School Fund', '9', ipsasData?.statement_of_receipts_and_payments?.payments?.boarding_school_fund?.amount || 0, '-'],
+                        ['TOTAL PAYMENTS', '', ipsasData?.statement_of_receipts_and_payments?.total_payments || 0, '-'],
+                        ['SURPLUS/DEFICIT', '', ipsasData?.statement_of_receipts_and_payments?.surplus_deficit || 0, '-']
+                      ];
+                      exportToCsv('ipsas_receipts_and_payments.csv', headers, rows);
+                    } else if (ipsasSubTab === 'Financial Assets and Liabilities') {
+                      const headers = ['Description', 'Note', `${financialYear} Kshs`, '- Kshs'];
+                      const rows = [
+                        ['Financial Assets', '', '', ''],
+                        ['Cash and Cash Equivalents', '', '', ''],
+                        ['Bank balances', '10', ipsasData?.statement_of_financial_assets_and_liabilities?.bank_balances || 0, '-'],
+                        ['Cash balances', '11', ipsasData?.statement_of_financial_assets_and_liabilities?.cash_in_hand || 0, '-'],
+                        ['Short term investments', '12', 0, '-'],
+                        ['Total cash and cash equivalent', '', (Number(ipsasData?.statement_of_financial_assets_and_liabilities?.bank_balances || 0) + Number(ipsasData?.statement_of_financial_assets_and_liabilities?.cash_in_hand || 0)), '-'],
+                        ['Accounts receivables', '13', ipsasData?.statement_of_financial_assets_and_liabilities?.accounts_receivable || 0, '-'],
+                        ['Total financial assets', '', ipsasData?.statement_of_financial_assets_and_liabilities?.total_assets || 0, '-'],
+                        ['Financial Liabilities', '', '', ''],
+                        ['Accounts payables', '14', 0, '-'],
+                        ['Net financial assets', '', ipsasData?.statement_of_financial_assets_and_liabilities?.net_financial_assets || 0, '-']
+                      ];
+                      exportToCsv('ipsas_financial_assets_and_liabilities.csv', headers, rows);
+                    } else if (ipsasSubTab === 'Appropriation') {
+                      const headers = ['Receipt/Expenses Item', 'Original Budget (a) KES', 'Adjustments (b) KES', 'Final Budget (c=a+b)', 'Actual on Comparable Basis (d)', 'Budget Utilization Difference (e=c-d) KES', '% of Utilization (f=d/c %) KES'];
+                      const rows: any[] = [['RECEIPTS', '', '', '', '', '', ''], ['(1) Capitation Grant On School Fund', '', '', '', '', '', '']];
+                      (ipsasData?.statement_of_appropriation || []).forEach((r: any) => {
+                        rows.push([r.item_name, r.original_budget, r.adjustments, r.final_budget, r.actual, r.difference, r.utilization_pct]);
+                      });
+                      exportToCsv('ipsas_appropriation.csv', headers, rows);
+                    } else {
+                      window.print();
+                    }
+                  }}
+                  className="p-2 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-600 rounded-lg shadow-sm cursor-pointer"
+                  title="Export to CSV"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleRefresh}
+                  className="p-2 bg-sky-50 border border-sky-200 hover:bg-sky-100 text-sky-600 rounded-lg shadow-sm cursor-pointer"
+                  title="Refresh"
+                >
+                  <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
-            {/* IPSAS SUB-VIEW: Notes 1-18 */}
+            {/* Statement Title */}
+            <div className="pt-2">
+              <h3 className="font-bold text-xs uppercase text-slate-900 tracking-normal">
+                {ipsasSubTab === 'Receipts And Payments' && `STATEMENT OF RECEIPTS AND PAYMENTS FOR THE YEAR ENDED 30 JUNE ${financialYear.split('/')[1] || '2027'}`}
+                {ipsasSubTab === 'Financial Assets and Liabilities' && `STATEMENT OF FINANCIAL ASSETS AND FINANCIAL LIABILITIES AS AT 30 JUNE ${financialYear.split('/')[1] || '2027'}`}
+                {ipsasSubTab === 'Cash Flow Statement' && `STATEMENT OF CASH FLOWS FOR THE YEAR ENDED 30 JUNE ${financialYear.split('/')[1] || '2027'}`}
+                {ipsasSubTab === 'Appropriation' && `STATEMENT OF BUDGETED VERSUS ACTUAL AMOUNTS FOR THE YEAR ENDED 30/06/${financialYear.split('/')[1] || '2027'}`}
+                {ipsasSubTab === 'Notes' && `NOTES TO THE FINANCIAL STATEMENTS FOR THE YEAR ENDED 30 JUNE ${financialYear.split('/')[1] || '2027'}`}
+              </h3>
+            </div>
+
+            {/* 1. IPSAS SUB-VIEW: Notes 1-18 */}
             {ipsasSubTab === 'Notes' && ipsasData?.notes && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.keys(ipsasData.notes).filter(k => k !== 'note_19').map((k) => {
                   const note = ipsasData.notes[k];
                   return (
-                    <div key={k} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-[#0284c7] text-white px-3.5 py-2 font-bold text-[11px] flex justify-between items-center">
+                    <div key={k} className="border border-slate-200 rounded-none overflow-hidden shadow-sm">
+                      <div className="bg-[#0073c8] text-white px-3.5 py-2 font-bold text-xs flex justify-between items-center">
                         <span>{note.title}</span>
                       </div>
                       <table className="w-full text-left text-xs font-mono">
@@ -1844,8 +1921,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
                         <tbody className="divide-y divide-slate-100 text-[11px]">
                           <tr className="bg-white">
                             <td className="py-2 px-3 font-sans font-medium text-slate-800">Total Net Amount</td>
-                            <td className="py-2 px-3 text-right font-bold text-slate-900">{formatCurrency(note.current)}</td>
-                            <td className="py-2 px-3 text-right text-slate-400">{formatCurrency(note.prior)}</td>
+                            <td className="py-2 px-3 text-right font-bold text-slate-900">{formatVal(note.current)}</td>
+                            <td className="py-2 px-3 text-right text-slate-400">-</td>
                           </tr>
                         </tbody>
                       </table>
@@ -1855,68 +1932,478 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
               </div>
             )}
 
-            {/* IPSAS SUB-VIEW: Statement of Receipts & Payments */}
+            {/* 2. IPSAS SUB-VIEW: Statement of Receipts & Payments (Exact Screenshot 1) */}
             {ipsasSubTab === 'Receipts And Payments' && (
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-w-3xl mx-auto">
-                <table className="w-full text-left text-xs font-mono">
-                  <thead className="bg-[#0284c7] text-white font-bold">
+              <div className="border border-slate-200 rounded-none overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0073c8] text-white font-bold">
                     <tr>
-                      <th className="py-3 px-4 font-sans">Statement Item</th>
-                      <th className="py-3 px-4 text-right">Current Year (KES)</th>
+                      <th className="py-2.5 px-4 font-sans uppercase border-r border-sky-400/40 w-[60%]">DESCRIPTION OF VOTE HEAD</th>
+                      <th className="py-2.5 px-3 text-center uppercase border-r border-sky-400/40 w-[10%]">NOTE</th>
+                      <th className="py-2.5 px-4 text-right uppercase border-r border-sky-400/40 w-[15%]">
+                        <div>{financialYear}</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
+                      <th className="py-2.5 px-4 text-right uppercase w-[15%]">
+                        <div>-</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-[11px]">
-                    <tr className="bg-emerald-50/50 font-bold">
-                      <td className="py-3 px-4 font-sans text-emerald-950">TOTAL RECEIPTS / REVENUE</td>
-                      <td className="py-3 px-4 text-right text-emerald-800">{formatCurrency(ipsasData?.statement_of_receipts_and_payments?.total_receipts)}</td>
+                  <tbody className="text-[12px] text-slate-800 divide-y divide-slate-100">
+                    {/* RECEIPTS */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-2 px-4 uppercase text-slate-900 border-r border-slate-100">RECEIPTS</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 border-r border-slate-100"></td>
+                      <td className="py-2 px-4"></td>
                     </tr>
-                    <tr className="bg-rose-50/50 font-bold">
-                      <td className="py-3 px-4 font-sans text-rose-950">TOTAL PAYMENTS / EXPENDITURE</td>
-                      <td className="py-3 px-4 text-right text-rose-800">{formatCurrency(ipsasData?.statement_of_receipts_and_payments?.total_payments)}</td>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government Grants For Tuition</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">1</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_tuition?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
                     </tr>
-                    <tr className="bg-slate-100 font-extrabold text-slate-950">
-                      <td className="py-3 px-4 font-sans uppercase">NET SURPLUS / (DEFICIT) FOR THE PERIOD</td>
-                      <td className="py-3 px-4 text-right font-bold">{formatCurrency(ipsasData?.statement_of_receipts_and_payments?.surplus_deficit)}</td>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government Grants For Operations</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">2</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_operations?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government Grants For Infrastructure</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">3</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.receipts?.grants_infrastructure?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">School Fund Income- Parents&apos; Contributions</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">4</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.receipts?.parents_contributions?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Miscellaneous Incomes</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">5</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.receipts?.miscellaneous?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Total receipts</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.total_receipts)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* PAYMENTS */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-3 px-4 uppercase text-slate-900 border-r border-slate-100">PAYMENTS</td>
+                      <td className="py-3 px-3 border-r border-slate-100"></td>
+                      <td className="py-3 px-4 border-r border-slate-100"></td>
+                      <td className="py-3 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Tuition</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">6</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.payments?.tuition?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Operations</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">7</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.payments?.operations?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Infrastructure</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">8</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.payments?.infrastructure?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Boarding And School Fund</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">9</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.payments?.boarding_school_fund?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 uppercase border-r border-slate-100">TOTAL PAYMENTS</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.total_payments)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* SURPLUS/DEFICIT */}
+                    <tr className="font-bold">
+                      <td className="py-4 px-4 uppercase text-slate-900 border-r border-slate-100">SURPLUS/DEFICIT</td>
+                      <td className="py-4 px-3 border-r border-slate-100"></td>
+                      <td className="py-4 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_receipts_and_payments?.surplus_deficit)}</td>
+                      <td className="py-4 px-4 text-right text-slate-800">-</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             )}
 
-            {/* IPSAS SUB-VIEW: Financial Assets & Liabilities */}
+            {/* 3. IPSAS SUB-VIEW: Financial Assets and Liabilities (Exact Screenshot 2) */}
             {ipsasSubTab === 'Financial Assets and Liabilities' && (
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm max-w-3xl mx-auto">
-                <table className="w-full text-left text-xs font-mono">
-                  <thead className="bg-[#0284c7] text-white font-bold">
+              <div className="border border-slate-200 rounded-none overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0073c8] text-white font-bold">
                     <tr>
-                      <th className="py-3 px-4 font-sans">Financial Asset / Liability Item</th>
-                      <th className="py-3 px-4 text-right">Current Year (KES)</th>
+                      <th className="py-2.5 px-4 font-sans border-r border-sky-400/40 w-[60%]">Description</th>
+                      <th className="py-2.5 px-3 text-center border-r border-sky-400/40 w-[10%]">Note</th>
+                      <th className="py-2.5 px-4 text-right border-r border-sky-400/40 w-[15%]">
+                        <div>{financialYear}</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
+                      <th className="py-2.5 px-4 text-right w-[15%]">
+                        <div>-</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-[11px]">
+                  <tbody className="text-[12px] text-slate-800 divide-y divide-slate-100">
+                    {/* Financial Assets */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-2 px-4 text-slate-900 border-r border-slate-100">Financial Assets</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 border-r border-slate-100"></td>
+                      <td className="py-2 px-4"></td>
+                    </tr>
+                    <tr className="bg-white font-bold">
+                      <td className="py-1.5 px-4 text-slate-900 border-r border-slate-100">Cash and Cash Equivalents</td>
+                      <td className="py-1.5 px-3 border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Bank balances</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">10</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.financial_assets?.bank_balances?.amount ?? ipsasData?.statement_of_financial_assets_and_liabilities?.bank_balances)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Cash balances</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">11</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.financial_assets?.cash_balances?.amount ?? ipsasData?.statement_of_financial_assets_and_liabilities?.cash_in_hand)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Short term investments</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">12</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Total cash and cash equivalent</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.financial_assets?.total_cash_equivalent ?? ((ipsasData?.statement_of_financial_assets_and_liabilities?.bank_balances || 0) + (ipsasData?.statement_of_financial_assets_and_liabilities?.cash_in_hand || 0)))}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Accounts receivables</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">13</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.financial_assets?.accounts_receivables?.amount ?? ipsasData?.statement_of_financial_assets_and_liabilities?.accounts_receivable)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Total financial assets</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.financial_assets?.total_financial_assets ?? ipsasData?.statement_of_financial_assets_and_liabilities?.total_assets)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Financial Liabilities */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-3 px-4 text-slate-900 border-r border-slate-100">Financial Liabilities</td>
+                      <td className="py-3 px-3 border-r border-slate-100"></td>
+                      <td className="py-3 px-4 border-r border-slate-100"></td>
+                      <td className="py-3 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Accounts payables</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">14</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Net Financial Assets */}
+                    <tr className="font-bold">
+                      <td className="py-4 px-4 text-slate-900 border-r border-slate-100">Net financial assets</td>
+                      <td className="py-4 px-3 border-r border-slate-100"></td>
+                      <td className="py-4 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_financial_assets_and_liabilities?.net_financial_assets)}</td>
+                      <td className="py-4 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 4. IPSAS SUB-VIEW: Cash Flow Statement (Exact Screenshot 4) */}
+            {ipsasSubTab === 'Cash Flow Statement' && (
+              <div className="border border-slate-200 rounded-none overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0073c8] text-white font-bold">
                     <tr>
-                      <td className="py-3 px-4 font-sans">Bank Account Balances</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(ipsasData?.statement_of_financial_assets_and_liabilities?.bank_balances)}</td>
+                      <th className="py-2.5 px-4 font-sans border-r border-sky-400/40 w-[60%]">Description</th>
+                      <th className="py-2.5 px-3 text-center border-r border-sky-400/40 w-[10%]">Note</th>
+                      <th className="py-2.5 px-4 text-right border-r border-sky-400/40 w-[15%]">
+                        <div>{financialYear}</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
+                      <th className="py-2.5 px-4 text-right w-[15%]">
+                        <div>-</div>
+                        <div className="text-[11px] font-normal">Kshs</div>
+                      </th>
                     </tr>
+                  </thead>
+                  <tbody className="text-[12px] text-slate-800 divide-y divide-slate-100">
+                    {/* Operating Activities */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-2 px-4 text-slate-900 border-r border-slate-100">cash from Operating Activities</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 border-r border-slate-100"></td>
+                      <td className="py-2 px-4"></td>
+                    </tr>
+                    <tr className="bg-white font-bold">
+                      <td className="py-1.5 px-4 text-slate-900 border-r border-slate-100">Receipts</td>
+                      <td className="py-1.5 px-3 border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government grants for tuition</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">1</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.grants_tuition?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government grants for operations</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">2</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.grants_operations?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Government Grants for infrastructure</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">3</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.grants_infrastructure?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">School fund income- parents&apos; contributions</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">4</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.parents_contributions?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Miscellaneous incomes</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">5</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.miscellaneous?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Total receipts</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.receipts?.total_receipts)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Operating Payments */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-3 px-4 text-slate-900 border-r border-slate-100">Payments</td>
+                      <td className="py-3 px-3 border-r border-slate-100"></td>
+                      <td className="py-3 px-4 border-r border-slate-100"></td>
+                      <td className="py-3 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Tuition</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">6</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.payments?.tuition?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Operations</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">7</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.payments?.operations?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Infrastructure</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">8</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.payments?.infrastructure?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Boarding and school fund</td>
+                      <td className="py-1.5 px-3 text-center font-bold border-r border-slate-100">9</td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.payments?.boarding_school_fund?.amount)}</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Total Payments</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.payments?.total_payments)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Net cash inflow/outflow from operating activities</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.operating_activities?.net_operating_cashflow)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Investing Activities */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-3 px-4 text-slate-900 border-r border-slate-100">Cash flow from investing activities</td>
+                      <td className="py-3 px-3 border-r border-slate-100"></td>
+                      <td className="py-3 px-4 border-r border-slate-100"></td>
+                      <td className="py-3 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Acquisition of assets</td>
+                      <td className="py-1.5 px-3 text-center border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Proceeds from sale of Assets</td>
+                      <td className="py-1.5 px-3 text-center border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Net cash flows used in investing activities</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Financing Activities */}
+                    <tr className="bg-white font-bold">
+                      <td className="py-3 px-4 text-slate-900 border-r border-slate-100">Cash flows from financing activities</td>
+                      <td className="py-3 px-3 border-r border-slate-100"></td>
+                      <td className="py-3 px-4 border-r border-slate-100"></td>
+                      <td className="py-3 px-4"></td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Proceeds from borrowings</td>
+                      <td className="py-1.5 px-3 text-center border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="hover:bg-slate-50/50">
+                      <td className="py-1.5 px-4 border-r border-slate-100">Repayment of borrowings</td>
+                      <td className="py-1.5 px-3 text-center border-r border-slate-100"></td>
+                      <td className="py-1.5 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-1.5 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Net cash flows from financing activities</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+
+                    {/* Summary lines */}
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Net increase/decrease in cash and cash equivalents</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.net_increase_in_cash)}</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-2 px-4 border-r border-slate-100">Cash and cash equivalents at BEGINNING of the year</td>
+                      <td className="py-2 px-3 text-center border-r border-slate-100">10</td>
+                      <td className="py-2 px-4 text-right border-r border-slate-100">0</td>
+                      <td className="py-2 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                    <tr className="font-bold">
+                      <td className="py-3 px-4 border-r border-slate-100">Cash and cash equivalents at END of the year</td>
+                      <td className="py-3 px-3 text-center border-r border-slate-100">10</td>
+                      <td className="py-3 px-4 text-right border-r border-slate-100">{formatVal(ipsasData?.statement_of_cash_flows?.cash_ending)}</td>
+                      <td className="py-3 px-4 text-right text-slate-800">-</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 5. IPSAS SUB-VIEW: Appropriation (Exact Screenshot 3) */}
+            {ipsasSubTab === 'Appropriation' && (
+              <div className="border border-slate-200 rounded-none overflow-x-auto shadow-sm">
+                <table className="w-full text-left text-xs min-w-[760px]">
+                  <thead className="bg-[#0073c8] text-white font-bold">
                     <tr>
-                      <td className="py-3 px-4 font-sans">Cash in Hand & Petty Cash</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(ipsasData?.statement_of_financial_assets_and_liabilities?.cash_in_hand)}</td>
+                      <th className="py-2.5 px-4 font-sans border-r border-sky-400/40 w-[28%]">Receipt/Expenses Item</th>
+                      <th className="py-2.5 px-3 text-right font-sans border-r border-sky-400/40 w-[12%]">
+                        <div>Original Budget</div>
+                        <div className="font-normal text-[11px]">a</div>
+                        <div className="font-normal text-[11px]">KES</div>
+                      </th>
+                      <th className="py-2.5 px-3 text-right font-sans border-r border-sky-400/40 w-[12%]">
+                        <div>Adjustments</div>
+                        <div className="font-normal text-[11px]">b</div>
+                        <div className="font-normal text-[11px]">KES</div>
+                      </th>
+                      <th className="py-2.5 px-3 text-right font-sans border-r border-sky-400/40 w-[12%]">
+                        <div>Final Budget</div>
+                        <div className="font-normal text-[11px]">c=a+b</div>
+                      </th>
+                      <th className="py-2.5 px-3 text-right font-sans border-r border-sky-400/40 w-[12%]">
+                        <div>Actual on Comparable Basis</div>
+                        <div className="font-normal text-[11px]">d</div>
+                      </th>
+                      <th className="py-2.5 px-3 text-right font-sans border-r border-sky-400/40 w-[12%]">
+                        <div>Budget Utilization Difference</div>
+                        <div className="font-normal text-[11px]">e=c-d</div>
+                        <div className="font-normal text-[11px]">KES</div>
+                      </th>
+                      <th className="py-2.5 px-3 text-right font-sans w-[12%]">
+                        <div>% of Utilization</div>
+                        <div className="font-normal text-[11px]">f=d/c %</div>
+                        <div className="font-normal text-[11px]">KES</div>
+                      </th>
                     </tr>
-                    <tr>
-                      <td className="py-3 px-4 font-sans">Accounts Receivable (Outstanding Fee Debtors)</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(ipsasData?.statement_of_financial_assets_and_liabilities?.accounts_receivable)}</td>
+                  </thead>
+                  <tbody className="text-[12px] text-slate-800 divide-y divide-slate-100">
+                    <tr className="bg-white font-bold">
+                      <td className="py-2 px-4 uppercase text-slate-900 border-r border-slate-100">RECEIPTS</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3"></td>
                     </tr>
-                    <tr className="bg-slate-100 font-extrabold text-slate-950">
-                      <td className="py-3 px-4 font-sans uppercase">NET FINANCIAL ASSETS / POSITION</td>
-                      <td className="py-3 px-4 text-right font-bold">{formatCurrency(ipsasData?.statement_of_financial_assets_and_liabilities?.net_financial_assets)}</td>
+                    <tr className="bg-white font-bold italic">
+                      <td className="py-2 px-4 text-slate-900 border-r border-slate-100">(1) Capitation Grant On School Fund</td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3 border-r border-slate-100"></td>
+                      <td className="py-2 px-3"></td>
                     </tr>
+                    {ipsasData?.statement_of_appropriation?.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="py-2 px-4 uppercase font-medium text-slate-700 border-r border-slate-100">{row.item_name}</td>
+                        <td className="py-2 px-3 text-right font-mono border-r border-slate-100">{formatVal(row.original_budget)}</td>
+                        <td className="py-2 px-3 text-right font-mono border-r border-slate-100">{formatVal(row.adjustments)}</td>
+                        <td className="py-2 px-3 text-right font-mono border-r border-slate-100">{formatVal(row.final_budget)}</td>
+                        <td className="py-2 px-3 text-right font-mono border-r border-slate-100">{formatVal(row.actual)}</td>
+                        <td className="py-2 px-3 text-right font-mono border-r border-slate-100">{formatVal(row.difference)}</td>
+                        <td className="py-2 px-3 text-right font-mono">{row.utilization_pct || '%'}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
 
             {/* Official 3-Signature Approval Section */}
-            <div className="mt-8 space-y-6 pt-4 border-t border-slate-200 pb-6">
+            <div className="mt-12 space-y-6 pt-6 border-t border-slate-200 pb-6">
               <p className="text-xs text-slate-800 font-medium">
                 This school&apos;s financial statements were approved on ......................................... and signed by:
               </p>

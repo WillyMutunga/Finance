@@ -1058,9 +1058,9 @@ class ReportService
         $feeReg = $this->getFeeRegister($schoolId);
         $expenses = $this->getExpenseSummary($schoolId);
 
-        $totBilledFees = $feeReg['summary']['total_expected'];
-        $totPaidFees = $feeReg['summary']['total_paid'];
-        $totSpent = $expenses['total_spent'];
+        $totBilledFees = (float)$feeReg['summary']['total_expected'];
+        $totPaidFees = (float)$feeReg['summary']['total_paid'];
+        $totSpent = (float)$expenses['total_spent'];
 
         $note1_Tuition = 0.00;
         $note2_Operations = 0.00;
@@ -1072,9 +1072,63 @@ class ReportService
         $totalPayments = $totSpent;
         $surplusDeficit = $totalReceipts - $totalPayments;
 
-        $bankClosing = $cashbook['summary']['closing_bank'];
-        $cashClosing = $cashbook['summary']['closing_cash'];
-        $receivables = $feeReg['summary']['total_balance'];
+        $bankClosing = (float)($cashbook['summary']['closing_bank'] ?? 0.0);
+        $cashClosing = (float)($cashbook['summary']['closing_cash'] ?? 0.0);
+        $receivables = (float)$feeReg['summary']['total_balance'];
+
+        // Appropriation data (Budget vs Actual per Vote Head)
+        $vhStmt = $this->db->prepare("
+            SELECT vh.id, vh.name, COALESCE(b.budgeted_amount, 0) as budget
+            FROM vote_heads vh
+            LEFT JOIN vote_head_budgets b ON vh.id = b.vote_head_id AND b.financial_year = :fy
+            WHERE vh.school_id = :school_id
+            ORDER BY vh.name ASC
+        ");
+        $vhStmt->execute([':school_id' => $schoolId, ':fy' => $financialYear]);
+        $rawVoteHeads = $vhStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $appropriationRows = [];
+        foreach ($rawVoteHeads as $v) {
+            $name = strtoupper(trim($v['name']));
+            $budget = (float)$v['budget'];
+            $adjustments = 0.00;
+            $finalBudget = $budget + $adjustments;
+
+            // Actual receipts for this vote head from cashbook or fee allocations
+            $actual = (float)($cashbook['receipts_totals']['vote_heads'][$name] ?? 0.00);
+            if ($actual == 0 && $totPaidFees > 0) {
+                // proportional share if not in cashbook
+                $actual = round($totPaidFees / max(1, count($rawVoteHeads)), 2);
+            }
+
+            $diff = $finalBudget - $actual;
+            $utilPct = $finalBudget > 0 ? round(($actual / $finalBudget) * 100, 1) . ' %' : ($actual > 0 ? '∞ %' : '%');
+
+            $appropriationRows[] = [
+                'item_name'       => $name,
+                'original_budget' => $budget,
+                'adjustments'     => $adjustments,
+                'final_budget'    => $finalBudget,
+                'actual'          => $actual,
+                'difference'      => $diff,
+                'utilization_pct' => $utilPct
+            ];
+        }
+
+        if (empty($appropriationRows)) {
+            $defaultItems = ['SUNDRY CREDITORS-2025', 'EWC', 'LTT', 'PE', 'ARREARS', 'BALANCE BROUGHT FORWARD', 'OVERPAYMENTS', 'FEE PREPAYMENT', 'BES', 'LUNCH', 'ADMIN COST', 'RMI', 'ACTIVITY', 'ARREARS-2025'];
+            foreach ($defaultItems as $item) {
+                $appropriationRows[] = [
+                    'item_name'       => $item,
+                    'original_budget' => 0.00,
+                    'adjustments'     => 0.00,
+                    'final_budget'    => 0.00,
+                    'actual'          => 0.00,
+                    'difference'      => 0.00,
+                    'utilization_pct' => '%'
+                ];
+            }
+        }
 
         return [
             'financial_year' => $financialYear,
@@ -1092,18 +1146,78 @@ class ReportService
                 'note_10'=> ['title' => '10. BOARDING & CATERING EXPENSES', 'current' => round($totSpent * 0.15, 2), 'prior' => 0.00]
             ],
             'statement_of_receipts_and_payments' => [
+                'receipts' => [
+                    'grants_tuition'        => ['note' => 1, 'amount' => $note1_Tuition],
+                    'grants_operations'     => ['note' => 2, 'amount' => $note2_Operations],
+                    'grants_infrastructure' => ['note' => 3, 'amount' => $note3_Infrastructure],
+                    'parents_contributions' => ['note' => 4, 'amount' => $note4_ParentFees],
+                    'miscellaneous'         => ['note' => 5, 'amount' => $note5_OtherIncome],
+                    'total_receipts'        => $totalReceipts
+                ],
+                'payments' => [
+                    'tuition'               => ['note' => 6, 'amount' => 0.00],
+                    'operations'            => ['note' => 7, 'amount' => 0.00],
+                    'infrastructure'        => ['note' => 8, 'amount' => 0.00],
+                    'boarding_school_fund'  => ['note' => 9, 'amount' => $totSpent],
+                    'total_payments'        => $totalPayments
+                ],
                 'total_receipts'  => $totalReceipts,
                 'total_payments'  => $totalPayments,
                 'surplus_deficit' => $surplusDeficit
             ],
             'statement_of_financial_assets_and_liabilities' => [
+                'financial_assets' => [
+                    'bank_balances'          => ['note' => 10, 'amount' => $bankClosing],
+                    'cash_balances'          => ['note' => 11, 'amount' => $cashClosing],
+                    'short_term_investments' => ['note' => 12, 'amount' => 0.00],
+                    'total_cash_equivalent'  => $bankClosing + $cashClosing,
+                    'accounts_receivables'   => ['note' => 13, 'amount' => $receivables],
+                    'total_financial_assets' => $bankClosing + $cashClosing + $receivables
+                ],
+                'financial_liabilities' => [
+                    'accounts_payables'      => ['note' => 14, 'amount' => 0.00]
+                ],
                 'bank_balances'        => $bankClosing,
                 'cash_in_hand'         => $cashClosing,
                 'accounts_receivable'  => $receivables,
                 'total_assets'         => $bankClosing + $cashClosing + $receivables,
                 'accounts_payable'     => 0.00,
                 'net_financial_assets' => $bankClosing + $cashClosing + $receivables
-            ]
+            ],
+            'statement_of_cash_flows' => [
+                'operating_activities' => [
+                    'receipts' => [
+                        'grants_tuition'        => ['note' => 1, 'amount' => $note1_Tuition],
+                        'grants_operations'     => ['note' => 2, 'amount' => $note2_Operations],
+                        'grants_infrastructure' => ['note' => 3, 'amount' => $note3_Infrastructure],
+                        'parents_contributions' => ['note' => 4, 'amount' => $note4_ParentFees],
+                        'miscellaneous'         => ['note' => 5, 'amount' => $note5_OtherIncome],
+                        'total_receipts'        => $totalReceipts
+                    ],
+                    'payments' => [
+                        'tuition'               => ['note' => 6, 'amount' => 0.00],
+                        'operations'            => ['note' => 7, 'amount' => 0.00],
+                        'infrastructure'        => ['note' => 8, 'amount' => 0.00],
+                        'boarding_school_fund'  => ['note' => 9, 'amount' => $totSpent],
+                        'total_payments'        => $totalPayments
+                    ],
+                    'net_operating_cashflow' => $surplusDeficit
+                ],
+                'investing_activities' => [
+                    'acquisition_of_assets' => 0.00,
+                    'sale_of_assets'        => 0.00,
+                    'net_investing_cashflow' => 0.00
+                ],
+                'financing_activities' => [
+                    'borrowings'            => 0.00,
+                    'repayments'            => 0.00,
+                    'net_financing_cashflow'=> 0.00
+                ],
+                'net_increase_in_cash'   => $surplusDeficit,
+                'cash_beginning'         => 0.00,
+                'cash_ending'            => $bankClosing + $cashClosing
+            ],
+            'statement_of_appropriation' => $appropriationRows
         ];
     }
 
