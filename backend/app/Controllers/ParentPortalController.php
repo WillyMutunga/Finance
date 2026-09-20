@@ -39,7 +39,7 @@ class ParentPortalController
             LEFT JOIN streams st ON s.stream_id = st.id
             LEFT JOIN student_guardians sg ON s.id = sg.student_id AND sg.is_primary = TRUE
             LEFT JOIN guardians g ON sg.guardian_id = g.id
-            WHERE (s.id::text = :student_id OR LOWER(s.admission_number) = LOWER(:student_id)) AND s.school_id = :school_id
+            WHERE (s.id = :student_id OR LOWER(s.admission_number) = LOWER(:student_id)) AND s.school_id = :school_id
         ");
         $stmt->execute([':student_id' => $studentId, ':school_id' => $schoolId]);
         $student = $stmt->fetch();

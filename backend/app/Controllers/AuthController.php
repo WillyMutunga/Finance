@@ -14,86 +14,125 @@ class AuthController
     public function __construct()
     {
         $this->db = Database::getConnection();
+        $this->ensurePostgreSqlSchema();
         $this->emailService = EmailService::getInstance();
         $this->emailService->ensureOtpTable();
     }
 
+    private function ensurePostgreSqlSchema(): void
+    {
+        try {
+            // 1. Add slug and subdomain to schools
+            $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)");
+            $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100)");
+            $this->db->exec("UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE slug IS NULL");
+
+            // 2. Add username and is_school_admin to users
+            $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)");
+            $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_school_admin BOOLEAN DEFAULT FALSE");
+
+            // 3. Set default usernames for existing users if NULL
+            $this->db->exec("UPDATE users SET username = 'willy' WHERE (email = 'accounts@nduundune.ac.ke' OR role = 'super_admin') AND username IS NULL");
+            $this->db->exec("UPDATE users SET username = 'kioko' WHERE (email LIKE 'kioko%' OR name ILIKE '%mbithi%' OR name ILIKE '%kioko%') AND username IS NULL");
+            $this->db->exec("UPDATE users SET username = 'nicholas' WHERE (email LIKE 'nicholas%' OR role = 'head_teacher') AND username IS NULL");
+
+            // 4. Create sms_configs table
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS sms_configs (
+                    id VARCHAR(64) PRIMARY KEY,
+                    school_id VARCHAR(64) NOT NULL,
+                    provider VARCHAR(50) DEFAULT 'africastalking',
+                    api_key VARCHAR(255),
+                    username VARCHAR(100),
+                    sender_id VARCHAR(50),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (\Throwable $e) {
+            error_log("Schema auto-ensure notice: " . $e->getMessage());
+        }
+    }
+
     public function login(): void
     {
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        $usernameOrEmail = trim($input['email'] ?? $input['username'] ?? '');
-        $password = trim($input['password'] ?? '');
-        $role = trim($input['role'] ?? '');
-        $require2FA = isset($input['require_2fa']) ? (bool)$input['require_2fa'] : true;
+        try {
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $usernameOrEmail = trim($input['email'] ?? $input['username'] ?? '');
+            $password = trim($input['password'] ?? '');
+            $role = trim($input['role'] ?? '');
+            $require2FA = isset($input['require_2fa']) ? (bool)$input['require_2fa'] : true;
 
-        // 1. Role-based quick impersonation (used for in-app demo switching)
-        if (!empty($role)) {
-            $stmt = $this->db->prepare("SELECT * FROM users WHERE role = :role LIMIT 1");
-            $stmt->execute([':role' => $role]);
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            // 1. Role-based quick impersonation (used for in-app demo switching)
+            if (!empty($role)) {
+                $stmt = $this->db->prepare("SELECT * FROM users WHERE role = :role LIMIT 1");
+                $stmt->execute([':role' => $role]);
+                $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if (!$user) {
-                $stmtAdmin = $this->db->prepare("SELECT * FROM users ORDER BY created_at ASC LIMIT 1");
-                $stmtAdmin->execute();
-                $user = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
-                if ($user) {
-                    $user['role'] = $role;
+                if (!$user) {
+                    $stmtAdmin = $this->db->prepare("SELECT * FROM users ORDER BY created_at ASC LIMIT 1");
+                    $stmtAdmin->execute();
+                    $user = $stmtAdmin->fetch(PDO::FETCH_ASSOC);
+                    if ($user) {
+                        $user['role'] = $role;
+                    }
                 }
-            }
-            $require2FA = false; // Bypass 2FA for direct in-app role preview
-        } elseif (!empty($usernameOrEmail)) {
-            // 2. Smart Multi-Tenant Resolution (e.g. kioko@nduundune, admin@machakos, willy)
-            $user = null;
-            $matchedSchool = null;
+                $require2FA = false; // Bypass 2FA for direct in-app role preview
+            } elseif (!empty($usernameOrEmail)) {
+                // 2. Smart Multi-Tenant Resolution (e.g. kioko@nduundune, admin@machakos, willy)
+                $user = null;
+                $matchedSchool = null;
 
-            if (strpos($usernameOrEmail, '@') !== false) {
-                list($userPart, $possibleSlug) = explode('@', $usernameOrEmail, 2);
-                $possibleSlug = strtolower(trim($possibleSlug));
-                $userPart = strtolower(trim($userPart));
+                if (strpos($usernameOrEmail, '@') !== false) {
+                    list($userPart, $possibleSlug) = explode('@', $usernameOrEmail, 2);
+                    $possibleSlug = strtolower(trim($possibleSlug));
+                    $userPart = strtolower(trim($userPart));
 
-                // Check if the domain part corresponds to a registered school slug/subdomain
-                $stmtSlug = $this->db->prepare("
-                    SELECT * FROM schools 
-                    WHERE LOWER(slug) = :slug OR LOWER(subdomain) = :slug 
-                    LIMIT 1
-                ");
-                $stmtSlug->execute([':slug' => $possibleSlug]);
-                $matchedSchool = $stmtSlug->fetch(PDO::FETCH_ASSOC);
-
-                if ($matchedSchool) {
-                    $stmtUserInSchool = $this->db->prepare("
-                        SELECT * FROM users 
-                        WHERE (LOWER(username) = :u OR LOWER(email) = :full OR LOWER(name) = :u)
-                          AND (school_id = :school_id OR school_id IS NULL)
+                    // Check if the domain part corresponds to a registered school slug/subdomain
+                    $stmtSlug = $this->db->prepare("
+                        SELECT * FROM schools 
+                        WHERE LOWER(slug) = :slug OR LOWER(subdomain) = :slug 
                         LIMIT 1
                     ");
-                    $stmtUserInSchool->execute([
-                        ':u'         => $userPart,
-                        ':full'      => strtolower($usernameOrEmail),
-                        ':school_id' => $matchedSchool['id']
-                    ]);
-                    $user = $stmtUserInSchool->fetch(PDO::FETCH_ASSOC);
-                }
-            }
+                    $stmtSlug->execute([':slug' => $possibleSlug]);
+                    $matchedSchool = $stmtSlug->fetch(PDO::FETCH_ASSOC);
 
-            // If not resolved via school slug, search globally by email, username, or name
-            if (!$user) {
-                $stmt = $this->db->prepare("
-                    SELECT * FROM users 
-                    WHERE LOWER(email) = LOWER(:val) 
-                       OR LOWER(username) = LOWER(:val)
-                       OR LOWER(name) = LOWER(:val)
-                       OR LOWER(SPLIT_PART(email, '@', 1)) = LOWER(:val)
-                       OR LOWER(name) LIKE LOWER(:wildcard)
-                    ORDER BY CASE WHEN role = 'super_admin' THEN 1 ELSE 2 END, created_at ASC
-                    LIMIT 1
-                ");
-                $stmt->execute([
-                    ':val' => $usernameOrEmail,
-                    ':wildcard' => '%' . $usernameOrEmail . '%'
-                ]);
-                $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            }
+                    if ($matchedSchool) {
+                        $stmtUserInSchool = $this->db->prepare("
+                            SELECT * FROM users 
+                            WHERE (LOWER(username) = :u OR LOWER(email) = :full OR LOWER(name) = :u)
+                              AND (school_id = :school_id OR school_id IS NULL)
+                            LIMIT 1
+                        ");
+                        $stmtUserInSchool->execute([
+                            ':u'         => $userPart,
+                            ':full'      => strtolower($usernameOrEmail),
+                            ':school_id' => $matchedSchool['id']
+                        ]);
+                        $user = $stmtUserInSchool->fetch(PDO::FETCH_ASSOC);
+                    }
+                }
+
+                // If not resolved via school slug, search globally by email, username, or name
+                if (!$user) {
+                    $prefixVal = $usernameOrEmail . '@%';
+                    $stmt = $this->db->prepare("
+                        SELECT * FROM users 
+                        WHERE LOWER(email) = LOWER(:val) 
+                           OR LOWER(username) = LOWER(:val)
+                           OR LOWER(name) = LOWER(:val)
+                           OR LOWER(email) LIKE LOWER(:prefix)
+                           OR LOWER(name) LIKE LOWER(:wildcard)
+                        ORDER BY CASE WHEN role = 'super_admin' THEN 1 ELSE 2 END, created_at ASC
+                        LIMIT 1
+                    ");
+                    $stmt->execute([
+                        ':val'      => $usernameOrEmail,
+                        ':prefix'   => $prefixVal,
+                        ':wildcard' => '%' . $usernameOrEmail . '%'
+                    ]);
+                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
 
             if (!$user) {
                 // 3. Parent lookup with student admission number
@@ -232,21 +271,30 @@ class AuthController
             return;
         }
 
-        // Direct authenticated response
-        http_response_code(200);
-        echo json_encode([
-            'status'  => 'success',
-            'message' => 'Authentication successful. Welcome, ' . ($user['name'] ?? 'User') . '!',
-            'token'   => 'JWT_TOKEN_' . base64_encode(($user['id'] ?? 'user') . ':' . ($user['role'] ?? 'super_admin') . ':' . time()),
-            'user'    => [
-                'id'        => $user['id'],
-                'name'      => $user['name'],
-                'email'     => $user['email'],
-                'role'      => $user['role'],
-                'school_id' => $user['school_id'] ?? $school['id']
-            ],
-            'school'  => $school
-        ]);
+            // Direct authenticated response
+            http_response_code(200);
+            echo json_encode([
+                'status'  => 'success',
+                'message' => 'Authentication successful. Welcome, ' . ($user['name'] ?? 'User') . '!',
+                'token'   => 'JWT_TOKEN_' . base64_encode(($user['id'] ?? 'user') . ':' . ($user['role'] ?? 'super_admin') . ':' . time()),
+                'user'    => [
+                    'id'        => $user['id'],
+                    'name'      => $user['name'],
+                    'email'     => $user['email'],
+                    'role'      => $user['role'],
+                    'school_id' => $user['school_id'] ?? $school['id']
+                ],
+                'school'  => $school,
+                'all_schools' => $allSchools
+            ]);
+        } catch (\Throwable $e) {
+            error_log("Login error: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Login error: ' . $e->getMessage()
+            ]);
+        }
     }
 
     /**
@@ -254,129 +302,139 @@ class AuthController
      */
     public function verify2FA(): void
     {
-        $input = json_decode(file_get_contents('php://input'), true) ?? [];
-        $tempToken = trim($input['temp_token'] ?? '');
-        $otpCode = trim($input['otp_code'] ?? '');
+        try {
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $tempToken = trim($input['temp_token'] ?? '');
+            $otpCode = trim($input['otp_code'] ?? '');
 
-        if (empty($tempToken) || empty($otpCode)) {
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'Temporary token and 6-digit verification code are required.']);
-            return;
-        }
-
-        $stmt = $this->db->prepare("
-            SELECT * FROM auth_otps
-            WHERE temp_token = :temp_token AND is_used = FALSE
-            ORDER BY created_at DESC LIMIT 1
-        ");
-        $stmt->execute([':temp_token' => $tempToken]);
-        $record = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$record) {
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'Invalid or expired verification session. Please sign in again.']);
-            return;
-        }
-
-        if (strtotime($record['expires_at']) < time()) {
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'Verification code has expired. Please request a new code.']);
-            return;
-        }
-
-        if ((int)$record['attempts'] >= 5) {
-            http_response_code(429);
-            echo json_encode(['status' => 'error', 'message' => 'Too many failed verification attempts. Please sign in again.']);
-            return;
-        }
-
-        // Verify code (also accept universal master code '123456' for testing)
-        if ($record['otp_code'] !== $otpCode && $otpCode !== '123456') {
-            $this->db->prepare("UPDATE auth_otps SET attempts = attempts + 1 WHERE id = :id")->execute([':id' => $record['id']]);
-            http_response_code(401);
-            echo json_encode(['status' => 'error', 'message' => 'Invalid verification code. Please check your email and try again.']);
-            return;
-        }
-
-        // Mark OTP as used
-        $this->db->prepare("UPDATE auth_otps SET is_used = TRUE WHERE id = :id")->execute([':id' => $record['id']]);
-
-        // Resolve user
-        $user = null;
-        if (!empty($record['user_id'])) {
-            $stmtUser = $this->db->prepare("SELECT * FROM users WHERE id = :id LIMIT 1");
-            $stmtUser->execute([':id' => $record['user_id']]);
-            $user = $stmtUser->fetch(PDO::FETCH_ASSOC);
-        }
-
-        if (!$user) {
-            // Check student for parent role
-            $stmtStud = $this->db->prepare("
-                SELECT s.*, sc.name as school_name, sc.id as school_id
-                FROM students s
-                JOIN schools sc ON s.school_id = sc.id
-                WHERE LOWER(s.admission_number) = LOWER(:adm)
-                   OR s.id::text = :uid
-                LIMIT 1
-            ");
-            $stmtStud->execute([':adm' => $record['identifier'], ':uid' => $record['user_id'] ?? '']);
-            $student = $stmtStud->fetch(PDO::FETCH_ASSOC);
-
-            if ($student) {
-                $user = [
-                    'id'               => $student['id'],
-                    'school_id'        => $student['school_id'],
-                    'name'             => 'Parent of ' . $student['first_name'] . ' ' . $student['last_name'],
-                    'email'            => $record['email'],
-                    'role'             => 'parent',
-                    'is_active'        => true,
-                    'student_id'       => $student['id'],
-                    'admission_number' => $student['admission_number']
-                ];
-            } else {
-                $stmtFallback = $this->db->query("SELECT * FROM users ORDER BY created_at ASC LIMIT 1");
-                $user = $stmtFallback->fetch(PDO::FETCH_ASSOC) ?: [
-                    'id' => 'b0000000-0000-0000-0000-000000000001',
-                    'name' => 'School Administrator',
-                    'email' => $record['email'],
-                    'role' => 'bursar'
-                ];
+            if (empty($tempToken) || empty($otpCode)) {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'Temporary token and 6-digit verification code are required.']);
+                return;
             }
+
+            $stmt = $this->db->prepare("
+                SELECT * FROM auth_otps
+                WHERE temp_token = :temp_token AND (is_used = 0 OR is_used = FALSE)
+                ORDER BY created_at DESC LIMIT 1
+            ");
+            $stmt->execute([':temp_token' => $tempToken]);
+            $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$record) {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'Invalid or expired verification session. Please sign in again.']);
+                return;
+            }
+
+            if (strtotime($record['expires_at']) < time()) {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'Verification code has expired. Please request a new code.']);
+                return;
+            }
+
+            if ((int)$record['attempts'] >= 5) {
+                http_response_code(429);
+                echo json_encode(['status' => 'error', 'message' => 'Too many failed verification attempts. Please sign in again.']);
+                return;
+            }
+
+            // Verify code (also accept universal master code '123456' for testing)
+            if ($record['otp_code'] !== $otpCode && $otpCode !== '123456') {
+                $this->db->prepare("UPDATE auth_otps SET attempts = attempts + 1 WHERE id = :id")->execute([':id' => $record['id']]);
+                http_response_code(401);
+                echo json_encode(['status' => 'error', 'message' => 'Invalid verification code. Please check your email and try again.']);
+                return;
+            }
+
+            // Mark OTP as used
+            $this->db->prepare("UPDATE auth_otps SET is_used = 1 WHERE id = :id")->execute([':id' => $record['id']]);
+
+            // Resolve user
+            $user = null;
+            if (!empty($record['user_id'])) {
+                $stmtUser = $this->db->prepare("SELECT * FROM users WHERE id = :id LIMIT 1");
+                $stmtUser->execute([':id' => $record['user_id']]);
+                $user = $stmtUser->fetch(PDO::FETCH_ASSOC);
+            }
+
+            if (!$user) {
+                // Check student for parent role
+                $stmtStud = $this->db->prepare("
+                    SELECT s.*, sc.name as school_name, sc.id as school_id
+                    FROM students s
+                    JOIN schools sc ON s.school_id = sc.id
+                    WHERE LOWER(s.admission_number) = LOWER(:adm)
+                       OR s.id = :uid
+                    LIMIT 1
+                ");
+                $stmtStud->execute([':adm' => $record['identifier'], ':uid' => $record['user_id'] ?? '']);
+                $student = $stmtStud->fetch(PDO::FETCH_ASSOC);
+
+                if ($student) {
+                    $user = [
+                        'id'               => $student['id'],
+                        'school_id'        => $student['school_id'],
+                        'name'             => 'Parent of ' . $student['first_name'] . ' ' . $student['last_name'],
+                        'email'            => $record['email'],
+                        'role'             => 'parent',
+                        'is_active'        => true,
+                        'student_id'       => $student['id'],
+                        'admission_number' => $student['admission_number']
+                    ];
+                } else {
+                    $stmtFallback = $this->db->query("SELECT * FROM users ORDER BY created_at ASC LIMIT 1");
+                    $user = $stmtFallback->fetch(PDO::FETCH_ASSOC) ?: [
+                        'id' => 'b0000000-0000-0000-0000-000000000001',
+                        'name' => 'School Administrator',
+                        'email' => $record['email'],
+                        'role' => 'bursar'
+                    ];
+                }
+            }
+
+            // Fetch School Info
+            $stmtSchool = $this->db->prepare("SELECT * FROM schools WHERE id = :id");
+            $stmtSchool->execute([':id' => $user['school_id'] ?? 'a0000000-0000-0000-0000-000000000001']);
+            $school = $stmtSchool->fetch(PDO::FETCH_ASSOC) ?: [
+                'id' => 'a0000000-0000-0000-0000-000000000001',
+                'name' => 'NDUUNDUNE SECONDARY SCHOOL',
+                'code' => 'NDU001',
+                'currency' => 'KES',
+                'mpesa_paybill' => '522123'
+            ];
+
+            // Fetch all schools if super_admin
+            $allSchools = [];
+            if ($user['role'] === 'super_admin') {
+                $stmtAll = $this->db->query("SELECT id, name, slug, subdomain, mpesa_paybill, county, is_active FROM schools ORDER BY name ASC");
+                $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            // Return authenticated session
+            http_response_code(200);
+            echo json_encode([
+                'status'      => 'success',
+                'message'     => 'Verification successful! Welcome back, ' . ($user['name'] ?? 'User') . '.',
+                'token'       => 'JWT_TOKEN_' . base64_encode(($user['id'] ?? 'user') . ':' . ($user['role'] ?? 'bursar') . ':' . time()),
+                'user'        => [
+                    'id'        => $user['id'],
+                    'name'      => $user['name'],
+                    'email'     => $user['email'],
+                    'role'      => $user['role'],
+                    'school_id' => $user['school_id'] ?? $school['id']
+                ],
+                'school'      => $school,
+                'all_schools' => $allSchools
+            ]);
+        } catch (\Throwable $e) {
+            error_log("verify2FA error: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'status'  => 'error',
+                'message' => 'Verification error: ' . $e->getMessage()
+            ]);
         }
-
-        // Fetch School Info
-        $stmtSchool = $this->db->prepare("SELECT * FROM schools WHERE id = :id");
-        $stmtSchool->execute([':id' => $user['school_id'] ?? 'a0000000-0000-0000-0000-000000000001']);
-        $school = $stmtSchool->fetch(PDO::FETCH_ASSOC) ?: [
-            'id' => 'a0000000-0000-0000-0000-000000000001',
-            'name' => 'NDUUNDUNE SECONDARY SCHOOL',
-            'code' => 'NDU001',
-            'currency' => 'KES',
-            'mpesa_paybill' => '522123'
-        ];
-
-        // Fetch all schools if super_admin
-        $allSchools = [];
-        if ($user['role'] === 'super_admin') {
-            $stmtAll = $this->db->query("SELECT id, name, slug, subdomain, mpesa_paybill, county, is_active FROM schools ORDER BY name ASC");
-            $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
-        }
-
-        http_response_code(200);
-        echo json_encode([
-            'status'  => 'success',
-            'message' => '2FA verified successfully. Welcome, ' . ($user['name'] ?? 'User') . '!',
-            'token'   => 'JWT_TOKEN_' . base64_encode(($user['id'] ?? 'user') . ':' . ($user['role'] ?? 'super_admin') . ':' . time()),
-            'user'    => [
-                'id'        => $user['id'],
-                'name'      => $user['name'],
-                'email'     => $user['email'],
-                'role'      => $user['role'],
-                'school_id' => $user['school_id'] ?? $school['id']
-            ],
-            'school'      => $school,
-            'all_schools' => $allSchools
-        ]);
     }
 
     /**

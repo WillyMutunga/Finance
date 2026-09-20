@@ -52,7 +52,7 @@ class VerificationController
             JOIN classes c ON s.class_id = c.id
             LEFT JOIN payment_transactions pt ON r.payment_transaction_id = pt.id
             WHERE r.receipt_number = :id 
-               OR r.id::text = :id
+               OR r.id = :id
                OR r.reference_code = :id
             LIMIT 1
         ");
@@ -105,7 +105,7 @@ class VerificationController
                 JOIN schools sc ON s.school_id = sc.id
                 JOIN classes c ON s.class_id = c.id
                 WHERE LOWER(s.admission_number) = LOWER(:adm)
-                   OR s.id::text = :adm
+                   OR s.id = :adm
                 LIMIT 1
             ");
             $stmtStud->execute([':adm' => $cleanAdm]);

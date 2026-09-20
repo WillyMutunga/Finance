@@ -407,7 +407,7 @@ class PaymentController
             JOIN students s ON r.student_id = s.id
             JOIN classes c ON s.class_id = c.id
             JOIN transaction_ledger tl ON r.ledger_entry_id = tl.id
-            WHERE (r.id::text = :id OR r.receipt_number = :id) AND r.school_id = :school_id
+            WHERE (r.id = :id OR r.receipt_number = :id) AND r.school_id = :school_id
         ");
         $stmt->execute([':id' => $id, ':school_id' => $schoolId]);
         $receipt = $stmt->fetch();
