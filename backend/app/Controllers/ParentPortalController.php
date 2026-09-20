@@ -78,7 +78,8 @@ class ParentPortalController
             SELECT r.*, r.issued_at as date,
                    s.admission_number, s.first_name, s.last_name,
                    c.name as class_name,
-                   pt.payment_mode, pt.reference_code, pt.payer_name
+                   r.payment_mode, r.reference_code,
+                   COALESCE(pt.payer_name, 'Guardian / Parent') as payer_name
             FROM receipts r
             LEFT JOIN students s ON r.student_id = s.id
             LEFT JOIN classes c ON s.class_id = c.id
