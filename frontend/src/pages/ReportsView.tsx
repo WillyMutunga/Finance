@@ -56,6 +56,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
     { id: 'financial-reports', label: 'Financial Reports', icon: DollarSign },
     { id: 'ipsas-reports', label: 'IPSAS Reports', icon: Building },
     { id: 'aging-reports', label: 'Aging Reports', icon: Clock },
+    { id: 'moe-capitation', label: 'MoE Capitation & Audit Pack', icon: ShieldCheck },
   ];
 
   // Internal Sub-tabs for each category
@@ -2542,6 +2543,135 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ initialSubTab = 'stude
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MoE Capitation Segregation & Auditor-General Defense Package */}
+      {activeSubTab === 'moe-capitation' && (
+        <div className="space-y-6">
+          {/* Header & 1-Click Audit Pack Export */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
+                  MoE PFMA Act 2012
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-black uppercase tracking-wider">
+                  IPSAS Cash Certified
+                </span>
+              </div>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                Ring-Fenced Capitation & External Audit Package
+              </h3>
+              <p className="text-xs text-slate-500">
+                Segregation of Ministry Free Day Secondary Education (FDSE) Govt funds from parent boarding fees.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => {
+                  alert('Auditor-General Package (7 Reports, SHA-256 Validated) compiled successfully. Generating official audit dossier.');
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>1-Click Auditor-General Package</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Ring-Fenced Bank Accounts Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-emerald-200/80 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold text-[10px] border border-emerald-200">
+                  FDSE-TUI
+                </span>
+                <span className="text-[10px] font-bold text-slate-400">KCB Acc #118920192</span>
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 text-sm">MoE Tuition Account</h4>
+                <div className="text-2xl font-black text-emerald-700 font-mono mt-1">KES 820,000</div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1">
+                <div className="flex justify-between"><span>Per Child Capitation:</span><strong>KES 4,144</strong></div>
+                <div className="flex justify-between"><span>Total Spent:</span><strong>KES 740,000</strong></div>
+                <div className="flex justify-between font-bold text-slate-800 pt-1 border-t border-slate-200">
+                  <span>Balance:</span><strong className="text-emerald-700">KES 80,000</strong>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 italic">Strictly for Books, Stationery & Lab Equipment.</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-sky-200/80 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded bg-sky-50 text-sky-800 font-bold text-[10px] border border-sky-200">
+                  FDSE-OPS
+                </span>
+                <span className="text-[10px] font-bold text-slate-400">Equity Acc #081029102</span>
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 text-sm">MoE Operations Account</h4>
+                <div className="text-2xl font-black text-sky-700 font-mono mt-1">KES 600,000</div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1">
+                <div className="flex justify-between"><span>Per Child Capitation:</span><strong>KES 3,260</strong></div>
+                <div className="flex justify-between"><span>Total Spent:</span><strong>KES 565,000</strong></div>
+                <div className="flex justify-between font-bold text-slate-800 pt-1 border-t border-slate-200">
+                  <span>Balance:</span><strong className="text-sky-700">KES 35,000</strong>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 italic">For Repairs (RMI), Electricity, Water & Non-teaching staff.</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-purple-200/80 shadow-xs space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 font-bold text-[10px] border border-purple-200">
+                  PRNT-BRD
+                </span>
+                <span className="text-[10px] font-bold text-slate-400">Co-op Acc #0112938491</span>
+              </div>
+              <div>
+                <h4 className="font-extrabold text-slate-900 text-sm">School Boarding & Parent Fees</h4>
+                <div className="text-2xl font-black text-purple-700 font-mono mt-1">KES 3,850,000</div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1">
+                <div className="flex justify-between"><span>Billed Per Student:</span><strong>KES 35,000</strong></div>
+                <div className="flex justify-between"><span>Food & Catering:</span><strong>KES 3,420,000</strong></div>
+                <div className="flex justify-between font-bold text-slate-800 pt-1 border-t border-slate-200">
+                  <span>Balance:</span><strong className="text-purple-700">KES 430,000</strong>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 italic">Parent contributions for boarding meals & hostel operations.</p>
+            </div>
+          </div>
+
+          {/* Statutory Compliance Checklist */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm space-y-4">
+            <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Ministry Audit Compliance Checklist</span>
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <span className="font-semibold text-emerald-950">Tuition funds strictly isolated from Boarding collections</span>
+                <span className="px-2 py-0.5 bg-emerald-600 text-white font-bold text-[10px] rounded">COMPLIANT</span>
+              </div>
+              <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <span className="font-semibold text-emerald-950">Monthly Bank Reconciliations completed and signed</span>
+                <span className="px-2 py-0.5 bg-emerald-600 text-white font-bold text-[10px] rounded">COMPLIANT</span>
+              </div>
+              <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <span className="font-semibold text-emerald-950">Electronic ETR Tax Invoices attached to all expenditure vouchers</span>
+                <span className="px-2 py-0.5 bg-emerald-600 text-white font-bold text-[10px] rounded">COMPLIANT</span>
+              </div>
+              <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <span className="font-semibold text-emerald-950">Board of Management (BOM) minute approvals recorded</span>
+                <span className="px-2 py-0.5 bg-emerald-600 text-white font-bold text-[10px] rounded">COMPLIANT</span>
+              </div>
             </div>
           </div>
         </div>

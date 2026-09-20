@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ApiService } from '../services/api';
+import { TwoFactorAuthModal } from '../components/TwoFactorAuthModal';
 import {
   ShieldCheck,
   Lock,
@@ -29,6 +30,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   // Parent Form State
   const [admissionNo, setAdmissionNo] = useState('');
 
+  // 2FA State
+  const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
+  const [twoFactorData, setTwoFactorData] = useState<{
+    tempToken: string;
+    maskedEmail: string;
+    userPreview?: { name?: string; role?: string };
+    debugOtp?: string;
+  } | null>(null);
+
   // UI States
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +53,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const res = await ApiService.login(email, password);
-      if (res && res.status === 'success' && res.user) {
+      const res = await ApiService.login(email, password, true);
+      if (res && res.status === '2fa_required') {
+        setTwoFactorData({
+          tempToken: res.temp_token,
+          maskedEmail: res.masked_email,
+          userPreview: res.user_preview,
+          debugOtp: res.debug_otp
+        });
+        setShowTwoFactorModal(true);
+      } else if (res && res.status === 'success' && res.user) {
         onLoginSuccess(res.user, res.token, res.school);
       } else {
         setError('Invalid username/email or password.');
@@ -67,8 +85,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const res = await ApiService.login(admissionNo.trim(), 'parent123');
-      if (res && res.status === 'success' && res.user) {
+      const res = await ApiService.login(admissionNo.trim(), 'parent123', true);
+      if (res && res.status === '2fa_required') {
+        setTwoFactorData({
+          tempToken: res.temp_token,
+          maskedEmail: res.masked_email,
+          userPreview: res.user_preview,
+          debugOtp: res.debug_otp
+        });
+        setShowTwoFactorModal(true);
+      } else if (res && res.status === 'success' && res.user) {
         onLoginSuccess(
           {
             ...res.user,
@@ -367,6 +393,25 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* 2FA Verification Modal */}
+      {twoFactorData && (
+        <TwoFactorAuthModal
+          isOpen={showTwoFactorModal}
+          tempToken={twoFactorData.tempToken}
+          maskedEmail={twoFactorData.maskedEmail}
+          userPreview={twoFactorData.userPreview}
+          debugOtp={twoFactorData.debugOtp}
+          onSuccess={({ user, school, token }) => {
+            setShowTwoFactorModal(false);
+            onLoginSuccess(user, token, school);
+          }}
+          onCancel={() => {
+            setShowTwoFactorModal(false);
+            setTwoFactorData(null);
+          }}
+        />
       )}
 
       {/* 5. BRIGHT FROSTED FOOTER */}

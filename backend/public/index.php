@@ -84,8 +84,24 @@ try {
     // 1. Auth & Persona
     if ($uri === '/auth/login' && $method === 'POST') {
         (new AuthController())->login();
+    } elseif ($uri === '/auth/verify-2fa' && $method === 'POST') {
+        (new AuthController())->verify2FA();
+    } elseif ($uri === '/auth/resend-2fa' && $method === 'POST') {
+        (new AuthController())->resend2FA();
     } elseif ($uri === '/auth/me' && $method === 'GET') {
         (new AuthController())->me();
+    }
+
+    // 1.1 Parent Portal & Student Financial Self-Service
+    elseif (preg_match('#^/parent/student/([a-zA-Z0-9\-\_]+)$#', $uri, $matches) && $method === 'GET') {
+        (new \App\Controllers\ParentPortalController())->studentSummary($matches[1]);
+    } elseif ($uri === '/parent/pay-stk' && $method === 'POST') {
+        (new \App\Controllers\ParentPortalController())->paySTK();
+    }
+
+    // 1.2 Cryptographic Public Document Verification (QR Scans)
+    elseif (preg_match('#^/verify/(?:document|receipt|certificate)/([a-zA-Z0-9\-\_]+)$#', $uri, $matches) && $method === 'GET') {
+        (new \App\Controllers\VerificationController())->verify($matches[1]);
     }
 
     // 2. Dashboard
@@ -348,6 +364,10 @@ try {
         (new ReportController())->ipsas();
     } elseif ($uri === '/reports/aging' && $method === 'GET') {
         (new ReportController())->aging();
+    } elseif ($uri === '/reports/capitation-segregation' && $method === 'GET') {
+        (new ReportController())->capitationSegregation();
+    } elseif ($uri === '/reports/audit-defense-package' && $method === 'GET') {
+        (new ReportController())->auditDefensePackage();
     }
 
     // 9.1 Stores & Inventory Management

@@ -55,22 +55,50 @@ export class ApiService {
   }
 
   // Auth & Session
-  static async login(email: string, password?: string) {
-    return this.request<{ status: string; message?: string; token: string; user: any; school: any }>('/auth/login', {
+  static async login(email: string, password?: string, require_2fa: boolean = true) {
+    return this.request<any>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password, require_2fa })
+    });
+  }
+
+  static async verify2FA(tempToken: string, otpCode: string) {
+    return this.request<{ status: string; message?: string; token: string; user: any; school: any }>('/auth/verify-2fa', {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken, otp_code: otpCode })
+    });
+  }
+
+  static async resend2FA(tempToken: string) {
+    return this.request<{ status: string; message?: string; debug_otp?: string }>('/auth/resend-2fa', {
+      method: 'POST',
+      body: JSON.stringify({ temp_token: tempToken })
     });
   }
 
   static async switchRole(role: string) {
     return this.request<{ status: string; message?: string; token: string; user: any; school: any }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ role })
+      body: JSON.stringify({ role, require_2fa: false })
     });
   }
 
   static async getMe() {
     return this.request<{ status: string; user: any; school: any }>('/auth/me');
+  }
+
+  // Cryptographic Public Verification
+  static async verifyDocument(identifier: string) {
+    return this.request<any>(`/verify/document/${encodeURIComponent(identifier)}`);
+  }
+
+  // MoE & IPSAS Audit Reports
+  static async getCapitationSegregation(year?: string) {
+    return this.request<any>(`/reports/capitation-segregation${year ? `?year=${year}` : ''}`);
+  }
+
+  static async getAuditDefensePackage(year?: string) {
+    return this.request<any>(`/reports/audit-defense-package${year ? `?year=${year}` : ''}`);
   }
 
   // Dashboard

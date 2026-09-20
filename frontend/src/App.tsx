@@ -26,6 +26,7 @@ import { PromotionWizardView } from './pages/PromotionWizardView';
 import { SponsorsAndDiscountsView } from './pages/SponsorsAndDiscountsView';
 import { ClearanceManagementView } from './pages/ClearanceManagementView';
 import { KitchenRationsView } from './pages/KitchenRationsView';
+import { PublicDocumentVerificationView } from './pages/PublicDocumentVerificationView';
 import { ApiService } from './services/api';
 import { MessageCircle } from 'lucide-react';
 
@@ -81,6 +82,11 @@ export function App() {
     setIsAuthenticated(false);
     setCurrentUser(null);
   };
+
+  // Public document verification route (accessible by any QR code scanner)
+  if (window.location.pathname.startsWith('/verify')) {
+    return <PublicDocumentVerificationView />;
+  }
 
   // If user is not authenticated, present the professional Skysoft Finance login page
   if (!isAuthenticated) {

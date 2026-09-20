@@ -171,13 +171,43 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, sc
               </div>
             </div>
 
-            {/* Security / Verification */}
-            <div className="pt-4 flex items-center justify-between text-[10px] text-slate-400">
-              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Verified System Generated Document</span>
+            {/* Security / Verification & QR Code */}
+            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+              <div className="flex items-center gap-3">
+                {/* QR Code */}
+                <div className="p-1.5 bg-white border border-slate-200 rounded-lg shadow-2xs flex-shrink-0">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(
+                      `${window.location.origin}/verify/document/${receiptNo}`
+                    )}`}
+                    alt="Document Verification QR"
+                    className="w-14 h-14 object-contain"
+                    onError={(e: any) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+                <div className="space-y-0.5 text-left">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-extrabold text-xs">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Cryptographically Signed</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Scan QR to verify authenticity on public ledger</p>
+                  <a
+                    href={`/verify/document/${receiptNo}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-sky-600 hover:text-sky-700 font-bold underline inline-block"
+                  >
+                    Online Verification Link &rarr;
+                  </a>
+                </div>
               </div>
-              <div>Served by: School Accounts</div>
+
+              <div className="text-right text-[10px] text-slate-400 sm:self-end">
+                <div>Issued by: School Accounts</div>
+                <div className="font-mono text-[9px] text-slate-400">SHA-256 Validated</div>
+              </div>
             </div>
           </div>
         </div>

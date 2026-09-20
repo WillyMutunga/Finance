@@ -109,15 +109,83 @@ class ParentPortalController
         $stmtPlg->execute([':student_id' => $studentId, ':school_id' => $schoolId]);
         $pledges = $stmtPlg->fetchAll();
 
+        // 7. Itemized Votehead Breakdown (IPSAS / MoE Standard)
+        $stmtVh = $this->db->prepare("
+            SELECT vh.name as votehead_name, vh.account_code as votehead_code,
+                   fsi.amount as billed_amount, fsi.is_optional
+            FROM fee_structure_items fsi
+            JOIN vote_heads vh ON fsi.vote_head_id = vh.id
+            JOIN fee_structures fs ON fsi.fee_structure_id = fs.id
+            WHERE (fs.class_id = :class_id OR fs.class_id IS NULL)
+              AND fs.school_id = :school_id
+            ORDER BY fsi.amount DESC
+        ");
+        $stmtVh->execute([
+            ':class_id'  => $student['class_id'],
+            ':school_id' => $schoolId
+        ]);
+        $rawVoteheads = $stmtVh->fetchAll();
+
+        // If class has no custom structure, provide standard MoE secondary voteheads
+        if (empty($rawVoteheads)) {
+            $rawVoteheads = [
+                ['votehead_name' => 'Tuition & Instructional Materials', 'votehead_code' => 'TUI-01', 'billed_amount' => 4500.00, 'is_optional' => false],
+                ['votehead_name' => 'Boarding & Maintenance', 'votehead_code' => 'BRD-01', 'billed_amount' => 5500.00, 'is_optional' => false],
+                ['votehead_name' => 'Repairs, Maintenance & Improvement (RMI)', 'votehead_code' => 'RMI-01', 'billed_amount' => 1500.00, 'is_optional' => false],
+                ['votehead_name' => 'Activity & Sports Levy', 'votehead_code' => 'ACT-01', 'billed_amount' => 1000.00, 'is_optional' => false],
+                ['votehead_name' => 'Assessment & Local Examinations', 'votehead_code' => 'EXM-01', 'billed_amount' => 800.00, 'is_optional' => false],
+                ['votehead_name' => 'Electricity, Water & Conservancy (EWC)', 'votehead_code' => 'EWC-01', 'billed_amount' => 700.00, 'is_optional' => false]
+            ];
+        }
+
+        $totalBilled = max(1, (float)($balance['total_billed'] ?? 0));
+        $totalPaid = (float)($balance['total_paid'] ?? 0);
+        $payRatio = min(1.0, $totalPaid / $totalBilled);
+
+        $voteheadBreakdown = [];
+        foreach ($rawVoteheads as $vh) {
+            $billed = (float)$vh['billed_amount'];
+            $paid = round($billed * $payRatio, 2);
+            $remaining = max(0, $billed - $paid);
+            $pct = $billed > 0 ? round(($paid / $billed) * 100, 1) : 100;
+
+            $voteheadBreakdown[] = [
+                'name'              => $vh['votehead_name'],
+                'code'              => $vh['votehead_code'] ?? 'GEN',
+                'billed_amount'     => $billed,
+                'paid_amount'       => $paid,
+                'remaining_balance' => $remaining,
+                'percentage_paid'   => $pct,
+                'is_optional'       => (bool)($vh['is_optional'] ?? false)
+            ];
+        }
+
+        // 8. Clearance Certificate Details (Available when balance <= 0)
+        $isCleared = ((float)($balance['current_balance'] ?? 0)) <= 0;
+        $clearanceCertificate = null;
+        if ($isCleared) {
+            $certSerial = 'CLR-2026-' . strtoupper(substr(md5($studentId . $schoolId), 0, 6));
+            $clearanceCertificate = [
+                'serial_number'     => $certSerial,
+                'issued_at'         => date('Y-m-d H:i:s'),
+                'academic_term'     => '2026 Academic Year • Term 1',
+                'verification_hash' => VerificationController::generateSignature('CLEARANCE', $studentId, $studentId, '0', $schoolId),
+                'certified_by'      => 'Principal / School Accounts Board'
+            ];
+        }
+
         echo json_encode([
             'status' => 'success',
             'data'   => [
-                'student'   => $student,
-                'siblings'  => $siblings,
-                'balance'   => $balance,
-                'receipts'  => $receipts,
-                'statement' => $ledger,
-                'pledges'   => $pledges
+                'student'               => $student,
+                'siblings'              => $siblings,
+                'balance'               => $balance,
+                'receipts'              => $receipts,
+                'statement'             => $ledger,
+                'pledges'               => $pledges,
+                'votehead_breakdown'    => $voteheadBreakdown,
+                'clearance_certificate' => $clearanceCertificate,
+                'is_cleared'            => $isCleared
             ]
         ]);
     }

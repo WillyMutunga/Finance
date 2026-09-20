@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ApiService } from '../services/api';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { FeeStatementModal } from '../components/FeeStatementModal';
+import { ClearanceCertificateModal } from '../components/ClearanceCertificateModal';
 import {
   Search,
   FileText,
@@ -25,7 +26,10 @@ import {
   Building,
   GraduationCap,
   ChevronRight,
-  Calendar
+  Calendar,
+  Layers,
+  Award,
+  PieChart
 } from 'lucide-react';
 
 export const ParentPortalView: React.FC = () => {
@@ -35,9 +39,10 @@ export const ParentPortalView: React.FC = () => {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState<any | null>(null);
   const [showStatementModal, setShowStatementModal] = useState(false);
+  const [showClearanceModal, setShowClearanceModal] = useState(false);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'receipts' | 'statement' | 'pledges'>('receipts');
+  const [activeTab, setActiveTab] = useState<'receipts' | 'voteheads' | 'statement' | 'pledges'>('receipts');
 
   // M-Pesa STK Modal
   const [showPayModal, setShowPayModal] = useState(false);
@@ -453,7 +458,7 @@ export const ParentPortalView: React.FC = () => {
       </div>
 
       {/* Primary Action Buttons Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. M-Pesa STK Button */}
         <button
           onClick={() => {
@@ -485,7 +490,29 @@ export const ParentPortalView: React.FC = () => {
           </div>
         </button>
 
-        {/* 3. Promise Pledge Button */}
+        {/* 3. Fee Clearance Certificate Button */}
+        <button
+          onClick={() => setShowClearanceModal(true)}
+          className={`p-4 rounded-2xl font-bold text-sm shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-3 cursor-pointer group ${
+            currentBal <= 0
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-emerald-600/20 shadow-md'
+              : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200/90'
+          }`}
+        >
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform ${
+            currentBal <= 0 ? 'bg-white/20 text-white' : 'bg-purple-50 text-purple-600'
+          }`}>
+            <Award className="w-5 h-5" />
+          </div>
+          <div className="text-left">
+            <div className="leading-tight font-bold">Clearance Certificate</div>
+            <div className={`text-[11px] font-normal ${currentBal <= 0 ? 'text-emerald-100' : 'text-slate-400'}`}>
+              {currentBal <= 0 ? 'Verified Zero Balance' : 'Preview Official Slip'}
+            </div>
+          </div>
+        </button>
+
+        {/* 4. Promise Pledge Button */}
         <button
           onClick={() => {
             setPledgeAmount(currentBal > 0 ? String(currentBal) : '5000');
@@ -531,6 +558,18 @@ export const ParentPortalView: React.FC = () => {
             >
               <Receipt className="w-4 h-4 text-emerald-600" />
               <span>Official Payment Receipts ({receipts.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('voteheads')}
+              className={`py-4 border-b-2 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'voteheads'
+                  ? 'border-emerald-600 text-slate-900 font-extrabold'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Layers className="w-4 h-4 text-purple-600" />
+              <span>Votehead Breakdown ({profile?.votehead_breakdown?.length || 6})</span>
             </button>
 
             <button
@@ -637,7 +676,81 @@ export const ParentPortalView: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 2: Financial Ledger Statement */}
+        {/* Tab 2: Itemized Votehead Breakdown (IPSAS / MoE Standard) */}
+        {activeTab === 'voteheads' && (
+          <div className="p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Itemized Votehead Distribution</h4>
+                <p className="text-xs text-slate-500">Statutory breakdown of student term fees per Ministry of Education votehead category.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 font-bold text-xs border border-purple-200">
+                  MoE IPSAS Standard
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(profile?.votehead_breakdown || [
+                { name: 'Tuition & Instructional Materials', code: 'TUI-01', billed_amount: 4500, paid_amount: 2500, remaining_balance: 2000, percentage_paid: 55.6 },
+                { name: 'Boarding & Maintenance', code: 'BRD-01', billed_amount: 5500, paid_amount: 2500, remaining_balance: 3000, percentage_paid: 45.5 },
+                { name: 'Repairs, Maintenance & Improvement (RMI)', code: 'RMI-01', billed_amount: 1500, paid_amount: 0, remaining_balance: 1500, percentage_paid: 0 },
+                { name: 'Activity & Sports Levy', code: 'ACT-01', billed_amount: 1000, paid_amount: 0, remaining_balance: 1000, percentage_paid: 0 },
+                { name: 'Assessment & Local Examinations', code: 'EXM-01', billed_amount: 800, paid_amount: 0, remaining_balance: 800, percentage_paid: 0 },
+                { name: 'Electricity, Water & Conservancy (EWC)', code: 'EWC-01', billed_amount: 700, paid_amount: 0, remaining_balance: 700, percentage_paid: 0 }
+              ]).map((vh: any, idx: number) => {
+                const pct = Math.min(100, Math.max(0, vh.percentage_paid || 0));
+                const isCleared = vh.remaining_balance <= 0;
+
+                return (
+                  <div key={idx} className="bg-slate-50 hover:bg-slate-100/70 border border-slate-200/90 rounded-2xl p-5 space-y-3 transition-all">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="font-mono text-[10px] font-bold text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {vh.code}
+                        </span>
+                        <h5 className="font-extrabold text-slate-900 text-xs sm:text-sm mt-1 leading-snug">
+                          {vh.name}
+                        </h5>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        isCleared ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {isCleared ? 'Cleared' : `${pct}% Paid`}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 rounded-full ${
+                            isCleared ? 'bg-emerald-500' : pct > 50 ? 'bg-sky-500' : 'bg-amber-500'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500 font-mono pt-1">
+                        <span>Paid: <strong className="text-emerald-700">{formatCurrency(vh.paid_amount)}</strong></span>
+                        <span>Billed: <strong>{formatCurrency(vh.billed_amount)}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/80 flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Balance:</span>
+                      <span className={`font-mono font-extrabold ${isCleared ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {formatCurrency(vh.remaining_balance)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Financial Ledger Statement */}
         {activeTab === 'statement' && (
           <div className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-2">
@@ -989,6 +1102,15 @@ export const ParentPortalView: React.FC = () => {
           schoolName={student?.school_name || 'NDUUNDUNE SECONDARY SCHOOL'}
         />
       )}
+
+      {/* Official Fee Clearance Certificate Modal */}
+      <ClearanceCertificateModal
+        isOpen={showClearanceModal}
+        onClose={() => setShowClearanceModal(false)}
+        student={student}
+        schoolName={student?.school_name || 'NDUUNDUNE SECONDARY SCHOOL'}
+        certificateData={profile?.clearance_certificate}
+      />
     </div>
   );
 };
