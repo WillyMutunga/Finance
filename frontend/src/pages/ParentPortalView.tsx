@@ -54,6 +54,15 @@ export const ParentPortalView: React.FC = () => {
   const initPortal = async () => {
     setLoading(true);
     try {
+      const userStr = sessionStorage.getItem('skysoft_auth_user');
+      const storedUser = userStr ? JSON.parse(userStr) : null;
+      
+      if (storedUser && storedUser.role === 'parent' && storedUser.id) {
+        setSelectedStudentId(storedUser.id);
+        await loadParentData(storedUser.id);
+        return;
+      }
+
       const res = await ApiService.getStudents();
       if (res && res.data && res.data.length > 0) {
         setStudents(res.data);

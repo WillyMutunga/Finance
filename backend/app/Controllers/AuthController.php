@@ -53,25 +53,54 @@ class AuthController
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if (!$user) {
-                http_response_code(401);
-                echo json_encode([
-                    'status' => 'error',
-                    'message' => 'User not found. Please check your username or email.'
+                // 3. If not a staff user, check if this is a Parent logging in with a Student Admission Number
+                $stmtStud = $this->db->prepare("
+                    SELECT s.*, sc.name as school_name, sc.id as school_id
+                    FROM students s
+                    JOIN schools sc ON s.school_id = sc.id
+                    WHERE LOWER(s.admission_number) = LOWER(:adm)
+                       OR LOWER(s.admission_number) = LOWER(:adm_clean)
+                    LIMIT 1
+                ");
+                $stmtStud->execute([
+                    ':adm' => $usernameOrEmail,
+                    ':adm_clean' => str_replace(' ', '', $usernameOrEmail)
                 ]);
-                return;
-            }
+                $student = $stmtStud->fetch(PDO::FETCH_ASSOC);
 
-            // Verify Password
-            if (!empty($user['password_hash'])) {
-                $isMatch = password_verify($password, $user['password_hash']);
-                // Also accept direct master password if set
-                if (!$isMatch && $password !== 'William#20' && $password !== 'admin123') {
+                if ($student) {
+                    $user = [
+                        'id'               => $student['id'],
+                        'school_id'        => $student['school_id'],
+                        'name'             => 'Parent of ' . $student['first_name'] . ' ' . $student['last_name'],
+                        'email'            => $student['admission_number'],
+                        'phone'            => '',
+                        'role'             => 'parent',
+                        'is_active'        => true,
+                        'student_id'       => $student['id'],
+                        'admission_number' => $student['admission_number']
+                    ];
+                } else {
                     http_response_code(401);
                     echo json_encode([
-                        'status' => 'error',
-                        'message' => 'Incorrect password. Please try again.'
+                        'status'  => 'error',
+                        'message' => 'Student admission number or user not found. Please check and try again.'
                     ]);
                     return;
+                }
+            } else {
+                // Verify Password for staff users
+                if (!empty($user['password_hash'])) {
+                    $isMatch = password_verify($password, $user['password_hash']);
+                    // Also accept direct master password if set
+                    if (!$isMatch && $password !== 'William#20' && $password !== 'admin123') {
+                        http_response_code(401);
+                        echo json_encode([
+                            'status' => 'error',
+                            'message' => 'Incorrect password. Please try again.'
+                        ]);
+                        return;
+                    }
                 }
             }
         } else {
