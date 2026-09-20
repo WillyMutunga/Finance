@@ -57,22 +57,30 @@ export const ParentPortalView: React.FC = () => {
       const userStr = sessionStorage.getItem('skysoft_auth_user');
       const storedUser = userStr ? JSON.parse(userStr) : null;
       
-      if (storedUser && storedUser.role === 'parent' && storedUser.id) {
-        setSelectedStudentId(storedUser.id);
-        await loadParentData(storedUser.id);
-        return;
+      if (storedUser && (storedUser.role === 'parent' || storedUser.student_id || storedUser.email)) {
+        const lookupId = storedUser.student_id || storedUser.id || storedUser.email;
+        setSelectedStudentId(lookupId);
+        const res = await ApiService.getParentStudentSummary(lookupId);
+        if (res && res.data && res.data.student) {
+          setProfile(res.data);
+          setSelectedStudentId(res.data.student.id);
+          setLoading(false);
+          return;
+        }
       }
 
       const res = await ApiService.getStudents();
       if (res && res.data && res.data.length > 0) {
         setStudents(res.data);
         setSelectedStudentId(res.data[0].id);
+        const pRes = await ApiService.getParentStudentSummary(res.data[0].id);
+        if (pRes && pRes.data) setProfile(pRes.data);
       } else {
         setStudents([]);
-        setLoading(false);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error loading portal data:', e);
+    } finally {
       setLoading(false);
     }
   };
@@ -97,6 +105,7 @@ export const ParentPortalView: React.FC = () => {
   };
 
   const loadParentData = async (studId: string) => {
+    if (!studId) return;
     setLoading(true);
     try {
       const res = await ApiService.getParentStudentSummary(studId);
@@ -168,24 +177,16 @@ export const ParentPortalView: React.FC = () => {
     );
   }
 
-  if (!loading && students.length === 0) {
+  if (!loading && !profile) {
     return (
       <div className="max-w-md mx-auto bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm text-center space-y-4 my-8">
         <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
           <Smartphone className="w-8 h-8" />
         </div>
-        <h3 className="font-extrabold text-slate-900 text-lg">Parent Portal Ready</h3>
+        <h3 className="font-extrabold text-slate-900 text-lg">Parent Portal</h3>
         <p className="text-xs text-slate-500 leading-relaxed">
-          No student records found in the database. Please admit students first from the Students view to access their live fee statements and M-Pesa paybill.
+          Please enter student admission number above to access fee balances, statements, and Lipa Na M-Pesa.
         </p>
-      </div>
-    );
-  }
-
-  if (!profile) {
-    return (
-      <div className="flex items-center justify-center h-64 text-slate-400">
-        <span>No profile loaded.</span>
       </div>
     );
   }
