@@ -1290,27 +1290,9 @@ export class ApiService {
     });
   }
 
-  // SMS Broadcasting & Logs
-  static async sendBulkSMS(data: {
-    recipients: Array<{
-      student_id?: string;
-      student_name?: string;
-      admission_number?: string;
-      guardian_name?: string;
-      phone: string;
-      balance?: number;
-    }>;
-    template: string;
-    message_type?: string;
-  }) {
-    return this.request<{ status: string; message: string; dispatched_count: number; cost_kes: number }>('/sms/send-bulk', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  static async getSMSLogs() {
-    return this.request<{ status: string; data: any[] }>('/sms/logs');
+  // SMS Broadcasting & Logs (Forwarding aliases)
+  static async sendBulkSMS(data: any) {
+    return this.sendSMSBroadcast(data);
   }
 
   // User Management & Access Control
@@ -1809,26 +1791,6 @@ export class ApiService {
     });
   }
 
-  // ==========================================
-  // MESSAGING & SMS GATEWAY
-  // ==========================================
-
-  static async sendSMSBroadcast(data: {
-    recipients: Array<{
-      student_id?: string;
-      phone: string;
-      student_name?: string;
-      admission_number?: string;
-      balance?: number;
-    }>;
-    template: string;
-    message_type?: string;
-  }) {
-    return this.request<{ status: string; message: string; dispatched?: number }>('/messaging/send-broadcast', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
 
     // ==========================================
   // DELETION LOGS & AUDIT
@@ -1975,6 +1937,63 @@ export class ApiService {
 
   static async getKitchenCostAnalysis() {
     return this.request<{ status: string; data: any[] }>('/kitchen/cost-analysis');
+  }
+
+  // ==========================================
+  // 6. SMS GATEWAY & PARENT MESSAGING
+  // ==========================================
+  static async getSMSLogs() {
+    return this.request<{ status: string; data: any[] }>('/messaging/logs');
+  }
+
+  static async sendSMSBroadcast(data: {
+    recipients: Array<{
+      student_id?: string;
+      phone: string;
+      student_name?: string;
+      admission_number?: string;
+      guardian_name?: string;
+      balance?: number;
+    }>;
+    template: string;
+    message_type?: string;
+  }) {
+    return this.request<{
+      status: string;
+      message: string;
+      dispatched_count?: number;
+      failed_count?: number;
+      cost_kes?: number;
+      last_error?: string;
+    }>('/messaging/send-broadcast', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  static async getSMSGatewayConfig() {
+    return this.request<{ status: string; data: any }>('/messaging/gateway-config');
+  }
+
+  static async saveSMSGatewayConfig(config: {
+    provider: string;
+    api_key?: string;
+    username: string;
+    sender_id: string;
+    is_sandbox: boolean;
+    is_enabled: boolean;
+  }) {
+    return this.request<{ status: string; message: string }>('/messaging/gateway-config', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+  }
+
+  static async testSMSGateway(data: { phone: string; message?: string }) {
+    return this.request<{ status: string; message: string; data?: any }>('/messaging/test-sms', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
   }
 
   // Fallback demo state simulation

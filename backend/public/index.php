@@ -703,6 +703,19 @@ try {
         (new \App\Controllers\KitchenRationController())->getCostAnalysis();
     }
 
+    // 28. SMS Gateway & Parent Messaging
+    elseif (($uri === '/messaging/logs' || $uri === '/sms/logs') && $method === 'GET') {
+        (new SMSController())->logs();
+    } elseif (($uri === '/messaging/send-broadcast' || $uri === '/sms/send-bulk') && $method === 'POST') {
+        (new SMSController())->sendBulk();
+    } elseif ($uri === '/messaging/gateway-config' && $method === 'GET') {
+        (new SMSController())->getGatewayConfig();
+    } elseif ($uri === '/messaging/gateway-config' && $method === 'POST') {
+        (new SMSController())->saveGatewayConfig();
+    } elseif ($uri === '/messaging/test-sms' && $method === 'POST') {
+        (new SMSController())->sendTestSMS();
+    }
+
     // 16. External Webhooks & M-Pesa Simulator
     elseif ($uri === '/webhooks/mpesa/c2b-confirmation' && $method === 'POST') {
         (new WebhookController())->mpesaC2BConfirmation();
