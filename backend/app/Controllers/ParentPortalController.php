@@ -75,8 +75,14 @@ class ParentPortalController
 
         // 4. Receipts History
         $stmtRct = $this->db->prepare("
-            SELECT r.*, r.issued_at as date
+            SELECT r.*, r.issued_at as date,
+                   s.admission_number, s.first_name, s.last_name,
+                   c.name as class_name,
+                   pt.payment_mode, pt.reference_code, pt.payer_name
             FROM receipts r
+            LEFT JOIN students s ON r.student_id = s.id
+            LEFT JOIN classes c ON s.class_id = c.id
+            LEFT JOIN payment_transactions pt ON r.payment_transaction_id = pt.id
             WHERE r.student_id = :student_id AND r.school_id = :school_id
             ORDER BY r.issued_at DESC
         ");

@@ -615,9 +615,12 @@ export const ParentPortalView: React.FC = () => {
                           <button
                             onClick={() => setActiveReceipt({
                               ...r,
-                              student_name: `${student.first_name} ${student.last_name}`,
-                              student_admission_number: student.admission_number,
-                              class_name: student.class_name
+                              student_name: `${student.first_name || ''} ${student.last_name || ''}`.trim() || student.name || 'Student',
+                              admission_number: student.admission_number || r.admission_number,
+                              student_admission: student.admission_number || r.admission_number,
+                              student_admission_number: student.admission_number || r.admission_number,
+                              class_name: student.class_name || r.class_name,
+                              paid_by: r.payer_name || (student.guardian_name ? `${student.guardian_name} (Parent/Guardian)` : 'Guardian / Parent')
                             })}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl border border-emerald-200 transition-all cursor-pointer text-xs"
                           >

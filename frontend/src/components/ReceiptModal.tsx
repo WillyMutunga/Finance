@@ -35,11 +35,25 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, sc
 
   const amount = Number(receipt.amount || receipt.total_value || 0);
   const studentName = receipt.student_name || `${receipt.first_name || ''} ${receipt.last_name || ''}`.trim() || 'Student';
-  const admNo = receipt.admission_number || receipt.student_admission || 'N/A';
-  const className = receipt.class_name ? `${receipt.class_name}${receipt.stream_name ? ` (${receipt.stream_name})` : ''}` : 'Form 1';
+  const admNo = receipt.admission_number || receipt.student_admission_number || receipt.student_admission || receipt.adm_no || receipt.admission_no || receipt.student?.admission_number || 'N/A';
+  const className = receipt.class_name ? `${receipt.class_name}${receipt.stream_name ? ` (${receipt.stream_name})` : ''}` : (receipt.student?.class_name || 'Form 1');
   const receiptNo = receipt.receipt_number || 'RCT-2026-0001';
-  const paymentDate = receipt.issued_at || receipt.payment_date || receipt.created_at || new Date().toLocaleString();
-  const channel = receipt.payment_mode || receipt.channel || 'MPESA_C2B';
+
+  const formatReceiptDate = (raw: any) => {
+    if (!raw) return new Date().toLocaleString();
+    try {
+      // In case timestamp was concatenated without a space or has ISO formatting
+      const dateStr = String(raw).replace(/^(\d{4}-\d{2}-\d{2})(\d{2}:)/, '$1 $2');
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(raw);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    } catch {
+      return String(raw);
+    }
+  };
+
+  const paymentDate = formatReceiptDate(receipt.issued_at || receipt.payment_date || receipt.date || receipt.created_at);
+  const channel = receipt.payment_mode || receipt.channel || receipt.payment_method || 'MPESA_C2B';
   const refCode = receipt.reference_code || receipt.reference_number || 'N/A';
   const paidBy = receipt.payer_name || receipt.delivered_by || receipt.paid_by || 'Guardian / Parent';
 
