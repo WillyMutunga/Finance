@@ -2093,14 +2093,26 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
                       onSubmit={async (e) => {
                         e.preventDefault();
                         if (!newUser.name.trim() || !newUser.username.trim() || !newUser.password.trim()) {
-                          alert('Please enter Full Name, Username/Email, and Password.');
+                          alert('Please enter Full Name, Username, and Password.');
                           return;
                         }
                         setSavingUser(true);
                         try {
+                          const activeSchoolObj = (() => {
+                            try {
+                              const s = sessionStorage.getItem('skysoft_school') || localStorage.getItem('skysoft_school');
+                              return s ? JSON.parse(s) : null;
+                            } catch (err) {
+                              return null;
+                            }
+                          })();
+                          const schoolSlug = activeSchoolObj?.slug || schoolProfile?.slug || (schoolProfile?.name ? schoolProfile.name.split(' ')[0].toLowerCase() : 'nduundune');
+                          const cleanUserHandle = newUser.username.trim();
+                          const fullUsername = cleanUserHandle.includes('@') ? cleanUserHandle : `${cleanUserHandle}@${schoolSlug}`;
+
                           const res = await ApiService.createUser({
                             name: newUser.name.trim(),
-                            username: newUser.username.trim(),
+                            username: fullUsername,
                             password: newUser.password.trim(),
                             phone: newUser.phone.trim(),
                             role: newUser.role
@@ -2135,15 +2147,45 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1">Username / Email *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. jane.kilonzo or jane@school.ac.ke"
-                            value={newUser.username}
-                            onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-500"
-                          />
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">User Handle / Username *</label>
+                          {(() => {
+                            const activeSchoolObj = (() => {
+                              try {
+                                const s = sessionStorage.getItem('skysoft_school') || localStorage.getItem('skysoft_school');
+                                return s ? JSON.parse(s) : null;
+                              } catch (err) {
+                                return null;
+                              }
+                            })();
+                            const currentSlug = activeSchoolObj?.slug || schoolProfile?.slug || (schoolProfile?.name ? schoolProfile.name.split(' ')[0].toLowerCase() : 'nduundune');
+
+                            return (
+                              <div>
+                                <div className="flex items-center">
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. kioko"
+                                    value={newUser.username}
+                                    onChange={(e) => {
+                                      let val = e.target.value.toLowerCase().replace(/\s+/g, '');
+                                      if (val.includes('@')) {
+                                        val = val.split('@')[0];
+                                      }
+                                      setNewUser({ ...newUser, username: val });
+                                    }}
+                                    className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-l-lg text-xs font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
+                                  />
+                                  <div className="bg-slate-100 border border-l-0 border-slate-200 px-3 py-2.5 rounded-r-lg text-xs font-mono font-bold text-slate-600 select-none">
+                                    @{currentSlug}
+                                  </div>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  Login username: <span className="font-mono font-bold text-emerald-700">{newUser.username ? `${newUser.username}@${currentSlug}` : `[username]@${currentSlug}`}</span>
+                                </p>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         <div>

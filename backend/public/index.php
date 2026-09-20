@@ -716,6 +716,30 @@ try {
         (new SMSController())->sendTestSMS();
     }
 
+    // 29. Multi-Tenant School Directory & Onboarding (Super Admin)
+    elseif ($uri === '/admin/schools' && $method === 'GET') {
+        (new \App\Controllers\SchoolController())->listSchools();
+    } elseif ($uri === '/admin/schools' && $method === 'POST') {
+        (new \App\Controllers\SchoolController())->createSchool();
+    } elseif (preg_match('#^/admin/schools/([a-zA-Z0-9\-]+)$#', $uri, $matches) && $method === 'GET') {
+        (new \App\Controllers\SchoolController())->getSchool($matches[1]);
+    } elseif (preg_match('#^/admin/schools/([a-zA-Z0-9\-]+)$#', $uri, $matches) && ($method === 'PUT' || $method === 'POST')) {
+        (new \App\Controllers\SchoolController())->updateSchool($matches[1]);
+    }
+
+    // 30. School User Management & Access Control
+    elseif ($uri === '/users' && $method === 'GET') {
+        (new UserController())->index();
+    } elseif ($uri === '/users' && $method === 'POST') {
+        (new UserController())->create();
+    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)/status$#', $uri, $matches) && $method === 'POST') {
+        (new UserController())->updateStatus($matches[1]);
+    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)/reset-password$#', $uri, $matches) && $method === 'POST') {
+        (new UserController())->resetPassword($matches[1]);
+    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)$#', $uri, $matches) && $method === 'DELETE') {
+        (new UserController())->delete($matches[1]);
+    }
+
     // 16. External Webhooks & M-Pesa Simulator
     elseif ($uri === '/webhooks/mpesa/c2b-confirmation' && $method === 'POST') {
         (new WebhookController())->mpesaC2BConfirmation();

@@ -86,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'transport', label: 'Transport', icon: Bus, group: 'STUDENTS & OPS' },
 
     // Group 4: Administration & Services
+    { id: 'schools-directory', label: 'Schools Directory', icon: Building2, group: 'ADMINISTRATION' },
     { id: 'staff', label: 'Staff & Payroll', icon: UserCheck, hasSubmenu: true, group: 'ADMINISTRATION' },
     { id: 'reports-center', label: 'Reports', icon: BarChart3, hasSubmenu: true, group: 'ADMINISTRATION' },
     { id: 'inventory', label: 'Stores & Inventory', icon: Package, hasSubmenu: true, group: 'ADMINISTRATION' },
@@ -98,10 +99,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = (() => {
     switch (currentRole) {
       case 'super_admin':
-      case 'school_admin':
         return rawMenuItems;
+      case 'school_admin':
+        return rawMenuItems.filter((item) => item.id !== 'schools-directory');
       case 'bursar':
-        return rawMenuItems.filter((item) => item.id !== 'configurations' && item.id !== 'audit');
+        return rawMenuItems.filter((item) => item.id !== 'configurations' && item.id !== 'audit' && item.id !== 'schools-directory');
       case 'head_teacher':
         return rawMenuItems.filter((item) =>
           ['dashboard', 'students', 'invoicing', 'expenses', 'staff', 'reports-center', 'messaging', 'audit'].includes(item.id)
@@ -113,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'parent':
         return [];
       default:
-        return rawMenuItems;
+        return rawMenuItems.filter((item) => item.id !== 'schools-directory');
     }
   })();
 

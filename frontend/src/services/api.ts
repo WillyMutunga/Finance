@@ -1996,6 +1996,47 @@ export class ApiService {
     });
   }
 
+  // ==========================================
+  // 7. MULTI-SCHOOL DIRECTORY & ONBOARDING (SUPER ADMIN)
+  // ==========================================
+  static async getSchools() {
+    return this.request<{ status: string; data: any[]; total: number }>('/admin/schools');
+  }
+
+  static async getSchool(id: string) {
+    return this.request<{ status: string; data: any }>(`/admin/schools/${id}`);
+  }
+
+  static async createSchool(data: {
+    name: string;
+    slug?: string;
+    subdomain?: string;
+    county?: string;
+    code?: string;
+    motto?: string;
+    currency?: string;
+    mpesa_paybill?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    admin_name?: string;
+    admin_username?: string;
+    admin_email?: string;
+    admin_password?: string;
+  }) {
+    return this.request<{ status: string; message: string; data: any }>('/admin/schools', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  static async updateSchool(id: string, data: any) {
+    return this.request<{ status: string; message: string; data: any }>(`/admin/schools/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Fallback demo state simulation
   private static mockFallback<T>(endpoint: string, options: RequestInit): T {
     if (endpoint.includes('/dashboard')) {

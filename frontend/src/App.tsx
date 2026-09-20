@@ -27,6 +27,7 @@ import { SponsorsAndDiscountsView } from './pages/SponsorsAndDiscountsView';
 import { ClearanceManagementView } from './pages/ClearanceManagementView';
 import { KitchenRationsView } from './pages/KitchenRationsView';
 import { PublicDocumentVerificationView } from './pages/PublicDocumentVerificationView';
+import { SchoolsManagementView } from './pages/SchoolsManagementView';
 import { ApiService } from './services/api';
 import { MessageCircle } from 'lucide-react';
 
@@ -41,6 +42,30 @@ export function App() {
   const [schoolName, setSchoolName] = useState('NDUUNDUNE SECONDARY SCHOOL');
   const [schoolCode, setSchoolCode] = useState('NDU001');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Restore session if active
+    const token = sessionStorage.getItem('skysoft_auth_token') || localStorage.getItem('skysoft_auth_token');
+    const userStr = sessionStorage.getItem('skysoft_auth_user') || localStorage.getItem('skysoft_auth_user');
+    const schoolStr = sessionStorage.getItem('skysoft_school') || localStorage.getItem('skysoft_school');
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+        setCurrentRole(user.role || 'bursar');
+        ApiService.setToken(token);
+        if (schoolStr) {
+          const school = JSON.parse(schoolStr);
+          if (school.name) setSchoolName(school.name);
+          if (school.code) setSchoolCode(school.code);
+          if (school.id) ApiService.setTenantId(school.id);
+        }
+      } catch (e) {
+        console.error('Failed to restore session', e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // If role changed to parent, auto switch to parent-view
@@ -69,6 +94,22 @@ export function App() {
     } else {
       setActiveTab('dashboard');
     }
+  };
+
+  const handleSwitchSchool = (schoolId: string, name: string) => {
+    ApiService.setTenantId(schoolId);
+    setSchoolName(name);
+    const stored = sessionStorage.getItem('skysoft_school') || localStorage.getItem('skysoft_school');
+    if (stored) {
+      try {
+        const s = JSON.parse(stored);
+        s.id = schoolId;
+        s.name = name;
+        sessionStorage.setItem('skysoft_school', JSON.stringify(s));
+        localStorage.setItem('skysoft_school', JSON.stringify(s));
+      } catch (e) {}
+    }
+    setActiveTab('dashboard');
   };
 
   const handleLogout = () => {
@@ -104,6 +145,8 @@ export function App() {
         onLogout={handleLogout}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onNavigate={(tab) => setActiveTab(tab)}
+        onSwitchSchool={handleSwitchSchool}
       />
 
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -120,6 +163,12 @@ export function App() {
 
         {/* Main Workspace Area (Scrolls independently) */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto min-w-0 custom-scrollbar">
+
+          {activeTab === 'schools-directory' && (
+            <SchoolsManagementView
+              onSwitchSchool={(schoolId, name) => handleSwitchSchool(schoolId, name)}
+            />
+          )}
 
           {activeTab === 'dashboard' && (
             <DashboardView

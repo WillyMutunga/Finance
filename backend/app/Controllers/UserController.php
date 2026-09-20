@@ -29,7 +29,13 @@ class UserController
             $schoolId = $this->getTenantId();
             $status = $_GET['status'] ?? null;
 
-            $sql = "SELECT id, school_id, name, email, phone, role, is_active, last_login_at, created_at, updated_at 
+            // Fetch school details
+            $schoolStmt = $this->db->prepare("SELECT id, name, slug, subdomain FROM schools WHERE id = :school_id");
+            $schoolStmt->execute([':school_id' => $schoolId]);
+            $school = $schoolStmt->fetch(PDO::FETCH_ASSOC);
+            $schoolSlug = $school['slug'] ?? $school['subdomain'] ?? 'nduundune';
+
+            $sql = "SELECT id, school_id, name, username, email, phone, role, is_active, is_school_admin, last_login_at, created_at, updated_at 
                     FROM users 
                     WHERE (school_id = :school_id OR school_id IS NULL)";
             
@@ -46,15 +52,24 @@ class UserController
             $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Format for frontend
-            $formatted = array_map(function ($u) {
+            $formatted = array_map(function ($u) use ($schoolSlug, $school) {
+                $userPart = $u['username'] ?: explode('@', $u['email'])[0];
+                $displayUsername = (strpos($u['email'], '@') !== false && !strpos($u['email'], '.ac.ke') && !strpos($u['email'], '.com'))
+                    ? $u['email']
+                    : ($u['role'] === 'super_admin' ? $userPart : "{$userPart}@{$schoolSlug}");
+
                 return [
                     'id' => $u['id'],
                     'school_id' => $u['school_id'],
+                    'school_name' => $school['name'] ?? 'Primary Institution',
+                    'school_slug' => $schoolSlug,
                     'name' => $u['name'],
                     'email' => $u['email'],
-                    'username' => explode('@', $u['email'])[0],
+                    'username' => $displayUsername,
+                    'raw_username' => $userPart,
                     'phone' => $u['phone'] ?? '-',
                     'role' => $u['role'],
+                    'is_school_admin' => (bool)($u['is_school_admin'] ?? false),
                     'is_active' => (bool)$u['is_active'],
                     'status' => $u['is_active'] ? 'Active' : 'Deactivated',
                     'last_login_at' => $u['last_login_at'],
@@ -66,6 +81,7 @@ class UserController
             echo json_encode([
                 'status' => 'success',
                 'data' => $formatted,
+                'school' => $school,
                 'total' => count($formatted)
             ]);
         } catch (\Exception $e) {
@@ -76,7 +92,7 @@ class UserController
 
     /**
      * POST /users
-     * Create a new user with role and credentials
+     * Create a new user with role and credentials under current school
      */
     public function create()
     {
@@ -84,18 +100,17 @@ class UserController
             $data = json_decode(file_get_contents('php://input'), true);
 
             $name = trim($data['name'] ?? '');
-            $usernameOrEmail = trim($data['username'] ?? $data['email'] ?? '');
+            $usernameInput = trim($data['username'] ?? $data['email'] ?? '');
             $password = trim($data['password'] ?? '');
             $phone = trim($data['phone'] ?? '');
             $role = trim($data['role'] ?? 'bursar');
 
-            if (empty($name) || empty($usernameOrEmail) || empty($password)) {
+            if (empty($name) || empty($usernameInput) || empty($password)) {
                 http_response_code(400);
-                echo json_encode(['status' => 'error', 'message' => 'Full Name, Username/Email, and Password are required.']);
+                echo json_encode(['status' => 'error', 'message' => 'Full Name, Username, and Password are required.']);
                 return;
             }
 
-            // Allowed roles in PostgreSQL schema
             $validRoles = ['super_admin', 'school_admin', 'bursar', 'head_teacher', 'auditor', 'parent'];
             if (!in_array($role, $validRoles)) {
                 http_response_code(400);
@@ -103,38 +118,57 @@ class UserController
                 return;
             }
 
-            // Format email
-            $email = $usernameOrEmail;
-            if (strpos($email, '@') === false) {
-                $email = strtolower($usernameOrEmail) . '@nduundune.ac.ke';
-            }
-
             $schoolId = $this->getTenantId();
 
-            // Check if email already exists
-            $checkStmt = $this->db->prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(:email) AND (school_id = :school_id OR school_id IS NULL)");
-            $checkStmt->execute([':email' => $email, ':school_id' => $schoolId]);
+            // Fetch school slug
+            $schoolStmt = $this->db->prepare("SELECT slug, subdomain FROM schools WHERE id = :id");
+            $schoolStmt->execute([':id' => $schoolId]);
+            $school = $schoolStmt->fetch(PDO::FETCH_ASSOC);
+            $slug = $school['slug'] ?? $school['subdomain'] ?? 'nduundune';
+
+            // Clean username prefix and construct username@slug
+            $cleanUser = strtolower(preg_replace('/[^a-zA-Z0-9_\.]/', '', explode('@', $usernameInput)[0]));
+            if (empty($cleanUser)) $cleanUser = 'user' . rand(100, 999);
+            
+            $fullUsername = "{$cleanUser}@{$slug}";
+            $email = !empty($data['email']) ? trim($data['email']) : $fullUsername;
+
+            // Check if username/email already exists within this school
+            $checkStmt = $this->db->prepare("
+                SELECT id FROM users 
+                WHERE (LOWER(username) = LOWER(:u) OR LOWER(email) = LOWER(:full) OR LOWER(email) = LOWER(:e)) 
+                  AND (school_id = :school_id OR school_id IS NULL)
+            ");
+            $checkStmt->execute([
+                ':u'         => $cleanUser,
+                ':full'      => $fullUsername,
+                ':e'         => $email,
+                ':school_id' => $schoolId
+            ]);
             if ($checkStmt->fetch()) {
                 http_response_code(400);
-                echo json_encode(['status' => 'error', 'message' => "A user with email/username '{$usernameOrEmail}' already exists."]);
+                echo json_encode(['status' => 'error', 'message' => "A user with username '{$fullUsername}' already exists in this school."]);
                 return;
             }
 
             $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+            $isSchoolAdmin = ($role === 'school_admin' || $role === 'head_teacher');
 
             $stmt = $this->db->prepare("
-                INSERT INTO users (school_id, name, email, phone, password_hash, role, is_active, created_at, updated_at)
-                VALUES (:school_id, :name, :email, :phone, :password_hash, :role, true, NOW(), NOW())
-                RETURNING id, name, email, phone, role, is_active, created_at
+                INSERT INTO users (school_id, name, username, email, phone, password_hash, role, is_school_admin, is_active, created_at, updated_at)
+                VALUES (:school_id, :name, :username, :email, :phone, :password_hash, :role, :is_admin, true, NOW(), NOW())
+                RETURNING id, name, username, email, phone, role, is_active, is_school_admin, created_at
             ");
 
             $stmt->execute([
-                ':school_id' => $schoolId,
-                ':name' => $name,
-                ':email' => $email,
-                ':phone' => $phone,
+                ':school_id'     => $schoolId,
+                ':name'          => $name,
+                ':username'      => $cleanUser,
+                ':email'         => $fullUsername,
+                ':phone'         => $phone,
                 ':password_hash' => $passwordHash,
-                ':role' => $role
+                ':role'          => $role,
+                ':is_admin'      => $isSchoolAdmin ? 1 : 0
             ]);
 
             $created = $stmt->fetch(PDO::FETCH_ASSOC);
