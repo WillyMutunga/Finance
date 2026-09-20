@@ -21,22 +21,76 @@ class AuthController
 
     private function ensurePostgreSqlSchema(): void
     {
+        // 1. Users table: username
         try {
-            // 1. Add slug and subdomain to schools
-            $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)");
-            $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100)");
-            $this->db->exec("UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE slug IS NULL");
+            $checkUser = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'username'")->fetch();
+            if (!$checkUser) {
+                $this->db->exec("ALTER TABLE users ADD COLUMN username VARCHAR(100)");
+            }
+        } catch (\Throwable $e) {
+            try { $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)"); } catch (\Throwable $e2) {}
+        }
 
-            // 2. Add username and is_school_admin to users
-            $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)");
-            $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_school_admin BOOLEAN DEFAULT FALSE");
+        // 2. Users table: is_school_admin
+        try {
+            $checkAdmin = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'is_school_admin'")->fetch();
+            if (!$checkAdmin) {
+                $this->db->exec("ALTER TABLE users ADD COLUMN is_school_admin BOOLEAN DEFAULT FALSE");
+            }
+        } catch (\Throwable $e) {
+            try { $this->db->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_school_admin BOOLEAN DEFAULT FALSE"); } catch (\Throwable $e2) {}
+        }
 
-            // 3. Set default usernames for existing users if NULL
-            $this->db->exec("UPDATE users SET username = 'willy' WHERE (email = 'accounts@nduundune.ac.ke' OR role = 'super_admin') AND username IS NULL");
-            $this->db->exec("UPDATE users SET username = 'kioko' WHERE (email LIKE 'kioko%' OR name ILIKE '%mbithi%' OR name ILIKE '%kioko%') AND username IS NULL");
-            $this->db->exec("UPDATE users SET username = 'nicholas' WHERE (email LIKE 'nicholas%' OR role = 'head_teacher') AND username IS NULL");
+        // 3. Schools table: slug
+        try {
+            $checkSlug = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'schools' AND column_name = 'slug'")->fetch();
+            if (!$checkSlug) {
+                $this->db->exec("ALTER TABLE schools ADD COLUMN slug VARCHAR(100)");
+            }
+        } catch (\Throwable $e) {
+            try { $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)"); } catch (\Throwable $e2) {}
+        }
 
-            // 4. Create sms_configs table
+        // 4. Schools table: subdomain
+        try {
+            $checkSub = $this->db->query("SELECT column_name FROM information_schema.columns WHERE table_name = 'schools' AND column_name = 'subdomain'")->fetch();
+            if (!$checkSub) {
+                $this->db->exec("ALTER TABLE schools ADD COLUMN subdomain VARCHAR(100)");
+            }
+        } catch (\Throwable $e) {
+            try { $this->db->exec("ALTER TABLE schools ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100)"); } catch (\Throwable $e2) {}
+        }
+
+        // 5. Default data fixes
+        try { $this->db->exec("UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE slug IS NULL"); } catch (\Throwable $e) {}
+        try { $this->db->exec("UPDATE users SET username = 'willy' WHERE (email = 'accounts@nduundune.ac.ke' OR role = 'super_admin') AND username IS NULL"); } catch (\Throwable $e) {}
+        try { $this->db->exec("UPDATE users SET username = 'kioko' WHERE (email LIKE 'kioko%' OR name ILIKE '%mbithi%' OR name ILIKE '%kioko%') AND username IS NULL"); } catch (\Throwable $e) {}
+        try { $this->db->exec("UPDATE users SET username = 'nicholas' WHERE (email LIKE 'nicholas%' OR role = 'head_teacher') AND username IS NULL"); } catch (\Throwable $e) {}
+
+        // 6. Auth OTPs table
+        try {
+            $this->db->exec("
+                CREATE TABLE IF NOT EXISTS auth_otps (
+                    id VARCHAR(64) PRIMARY KEY,
+                    school_id VARCHAR(64),
+                    user_id VARCHAR(64),
+                    identifier VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    otp_code VARCHAR(12) NOT NULL,
+                    purpose VARCHAR(50) DEFAULT 'LOGIN_2FA',
+                    temp_token VARCHAR(128) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    is_used BOOLEAN DEFAULT FALSE,
+                    attempts INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_auth_otps_token ON auth_otps(temp_token)");
+            $this->db->exec("CREATE INDEX IF NOT EXISTS idx_auth_otps_identifier ON auth_otps(identifier)");
+        } catch (\Throwable $e) {}
+
+        // 7. SMS configs table
+        try {
             $this->db->exec("
                 CREATE TABLE IF NOT EXISTS sms_configs (
                     id VARCHAR(64) PRIMARY KEY,
@@ -49,9 +103,7 @@ class AuthController
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ");
-        } catch (\Throwable $e) {
-            error_log("Schema auto-ensure notice: " . $e->getMessage());
-        }
+        } catch (\Throwable $e) {}
     }
 
     public function login(): void
@@ -89,49 +141,84 @@ class AuthController
                     $userPart = strtolower(trim($userPart));
 
                     // Check if the domain part corresponds to a registered school slug/subdomain
-                    $stmtSlug = $this->db->prepare("
-                        SELECT * FROM schools 
-                        WHERE LOWER(slug) = :slug OR LOWER(subdomain) = :slug 
-                        LIMIT 1
-                    ");
-                    $stmtSlug->execute([':slug' => $possibleSlug]);
-                    $matchedSchool = $stmtSlug->fetch(PDO::FETCH_ASSOC);
-
-                    if ($matchedSchool) {
-                        $stmtUserInSchool = $this->db->prepare("
-                            SELECT * FROM users 
-                            WHERE (LOWER(username) = :u OR LOWER(email) = :full OR LOWER(name) = :u)
-                              AND (school_id = :school_id OR school_id IS NULL)
+                    try {
+                        $stmtSlug = $this->db->prepare("
+                            SELECT * FROM schools 
+                            WHERE LOWER(slug) = :slug OR LOWER(subdomain) = :slug 
                             LIMIT 1
                         ");
-                        $stmtUserInSchool->execute([
-                            ':u'         => $userPart,
-                            ':full'      => strtolower($usernameOrEmail),
-                            ':school_id' => $matchedSchool['id']
-                        ]);
-                        $user = $stmtUserInSchool->fetch(PDO::FETCH_ASSOC);
+                        $stmtSlug->execute([':slug' => $possibleSlug]);
+                        $matchedSchool = $stmtSlug->fetch(PDO::FETCH_ASSOC);
+                    } catch (\Throwable $e) {}
+
+                    if ($matchedSchool) {
+                        try {
+                            $stmtUserInSchool = $this->db->prepare("
+                                SELECT * FROM users 
+                                WHERE (LOWER(username) = :u OR LOWER(email) = :full OR LOWER(name) = :u)
+                                  AND (school_id = :school_id OR school_id IS NULL)
+                                LIMIT 1
+                            ");
+                            $stmtUserInSchool->execute([
+                                ':u'         => $userPart,
+                                ':full'      => strtolower($usernameOrEmail),
+                                ':school_id' => $matchedSchool['id']
+                            ]);
+                            $user = $stmtUserInSchool->fetch(PDO::FETCH_ASSOC);
+                        } catch (\Throwable $e) {
+                            $stmtUserInSchool = $this->db->prepare("
+                                SELECT * FROM users 
+                                WHERE (LOWER(email) = :full OR LOWER(name) = :u)
+                                  AND (school_id = :school_id OR school_id IS NULL)
+                                LIMIT 1
+                            ");
+                            $stmtUserInSchool->execute([
+                                ':u'         => $userPart,
+                                ':full'      => strtolower($usernameOrEmail),
+                                ':school_id' => $matchedSchool['id']
+                            ]);
+                            $user = $stmtUserInSchool->fetch(PDO::FETCH_ASSOC);
+                        }
                     }
                 }
 
                 // If not resolved via school slug, search globally by email, username, or name
                 if (!$user) {
                     $prefixVal = $usernameOrEmail . '@%';
-                    $stmt = $this->db->prepare("
-                        SELECT * FROM users 
-                        WHERE LOWER(email) = LOWER(:val) 
-                           OR LOWER(username) = LOWER(:val)
-                           OR LOWER(name) = LOWER(:val)
-                           OR LOWER(email) LIKE LOWER(:prefix)
-                           OR LOWER(name) LIKE LOWER(:wildcard)
-                        ORDER BY CASE WHEN role = 'super_admin' THEN 1 ELSE 2 END, created_at ASC
-                        LIMIT 1
-                    ");
-                    $stmt->execute([
-                        ':val'      => $usernameOrEmail,
-                        ':prefix'   => $prefixVal,
-                        ':wildcard' => '%' . $usernameOrEmail . '%'
-                    ]);
-                    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    try {
+                        $stmt = $this->db->prepare("
+                            SELECT * FROM users 
+                            WHERE LOWER(email) = LOWER(:val) 
+                               OR LOWER(username) = LOWER(:val)
+                               OR LOWER(name) = LOWER(:val)
+                               OR LOWER(email) LIKE LOWER(:prefix)
+                               OR LOWER(name) LIKE LOWER(:wildcard)
+                            ORDER BY CASE WHEN role = 'super_admin' THEN 1 ELSE 2 END, created_at ASC
+                            LIMIT 1
+                        ");
+                        $stmt->execute([
+                            ':val'      => $usernameOrEmail,
+                            ':prefix'   => $prefixVal,
+                            ':wildcard' => '%' . $usernameOrEmail . '%'
+                        ]);
+                        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    } catch (\Throwable $e) {
+                        $stmt = $this->db->prepare("
+                            SELECT * FROM users 
+                            WHERE LOWER(email) = LOWER(:val) 
+                               OR LOWER(name) = LOWER(:val)
+                               OR LOWER(email) LIKE LOWER(:prefix)
+                               OR LOWER(name) LIKE LOWER(:wildcard)
+                            ORDER BY CASE WHEN role = 'super_admin' THEN 1 ELSE 2 END, created_at ASC
+                            LIMIT 1
+                        ");
+                        $stmt->execute([
+                            ':val'      => $usernameOrEmail,
+                            ':prefix'   => $prefixVal,
+                            ':wildcard' => '%' . $usernameOrEmail . '%'
+                        ]);
+                        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                    }
                 }
 
             if (!$user) {
