@@ -307,8 +307,20 @@ class AuthController
         // Fetch all schools if super_admin
         $allSchools = [];
         if ($user['role'] === 'super_admin') {
-            $stmtAll = $this->db->query("SELECT id, name, slug, subdomain, mpesa_paybill, county, is_active FROM schools ORDER BY name ASC");
-            $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+            try {
+                $stmtAll = $this->db->query("SELECT * FROM schools ORDER BY name ASC");
+                $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($allSchools as &$sc) {
+                    if (empty($sc['slug'])) {
+                        $sc['slug'] = strtolower(explode(' ', $sc['name'] ?? 'school')[0]);
+                    }
+                    if (empty($sc['subdomain'])) {
+                        $sc['subdomain'] = $sc['slug'];
+                    }
+                }
+            } catch (\Throwable $e) {
+                $allSchools = [];
+            }
         }
 
         // If 2FA is required, generate 6-digit OTP and dispatch email
@@ -494,8 +506,20 @@ class AuthController
             // Fetch all schools if super_admin
             $allSchools = [];
             if ($user['role'] === 'super_admin') {
-                $stmtAll = $this->db->query("SELECT id, name, slug, subdomain, mpesa_paybill, county, is_active FROM schools ORDER BY name ASC");
-                $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+                try {
+                    $stmtAll = $this->db->query("SELECT * FROM schools ORDER BY name ASC");
+                    $allSchools = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+                    foreach ($allSchools as &$sc) {
+                        if (empty($sc['slug'])) {
+                            $sc['slug'] = strtolower(explode(' ', $sc['name'] ?? 'school')[0]);
+                        }
+                        if (empty($sc['subdomain'])) {
+                            $sc['subdomain'] = $sc['slug'];
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    $allSchools = [];
+                }
             }
 
             // Return authenticated session
