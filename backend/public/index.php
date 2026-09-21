@@ -496,8 +496,10 @@ try {
         (new SMSController())->sendBulk();
     }
 
-    // 15. User Management & Roles
-    elseif ($uri === '/users' && $method === 'GET') {
+    // 15. User Management, Profile & Roles
+    elseif (($uri === '/users/profile' || $uri === '/auth/profile') && ($method === 'POST' || $method === 'PUT')) {
+        (new UserController())->updateProfile();
+    } elseif ($uri === '/users' && $method === 'GET') {
         (new UserController())->index();
     } elseif ($uri === '/users' && $method === 'POST') {
         (new UserController())->create();
@@ -729,20 +731,6 @@ try {
         (new \App\Controllers\SchoolController())->deleteSchool($matches[1]);
     }
 
-    // 30. School User Management & Access Control
-    elseif (($uri === '/users/profile' || $uri === '/auth/profile') && ($method === 'POST' || $method === 'PUT')) {
-        (new UserController())->updateProfile();
-    } elseif ($uri === '/users' && $method === 'GET') {
-        (new UserController())->index();
-    } elseif ($uri === '/users' && $method === 'POST') {
-        (new UserController())->create();
-    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)/status$#', $uri, $matches) && $method === 'POST') {
-        (new UserController())->updateStatus($matches[1]);
-    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)/reset-password$#', $uri, $matches) && $method === 'POST') {
-        (new UserController())->resetPassword($matches[1]);
-    } elseif (preg_match('#^/users/([a-zA-Z0-9\-]+)$#', $uri, $matches) && $method === 'DELETE') {
-        (new UserController())->delete($matches[1]);
-    }
 
     // 16. External Webhooks & M-Pesa Simulator
     elseif ($uri === '/webhooks/mpesa/c2b-confirmation' && $method === 'POST') {
