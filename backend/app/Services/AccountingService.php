@@ -640,18 +640,34 @@ class AccountingService
     public function createJournalEntry(string $schoolId, array $data, ?string $userId = null): array
     {
         $entryDate = !empty($data['entry_date']) ? $data['entry_date'] : (!empty($data['date']) ? $data['date'] : date('Y-m-d'));
-        $reference = trim($data['reference'] ?? $data['reference_number'] ?? '');
-        $narration = trim($data['narration'] ?? '');
-        $entryNumber = 'JRN-' . date('Y') . '-' . str_pad((string)rand(1000, 9999), 4, '0', STR_PAD_LEFT);
+        $reference = trim($data['reference'] ?? $data['reference_number'] ?? $data['journal_number'] ?? '');
+        $narration = trim($data['narration'] ?? $data['description'] ?? '');
+        $entryNumber = !empty($data['journal_number']) ? trim($data['journal_number']) : (!empty($data['entry_number']) ? trim($data['entry_number']) : ('JRN-' . date('Y') . '-' . str_pad((string)rand(1000, 9999), 4, '0', STR_PAD_LEFT)));
 
         if (empty($narration)) {
-            throw new Exception('Narration/Justification is required for journal entries.');
+            throw new Exception('Narration/Description is required for journal entries.');
         }
 
         // Support simple format (debit_account, credit_account, amount) or multi-line items
         $items = [];
         if (!empty($data['items']) && is_array($data['items'])) {
-            $items = $data['items'];
+            foreach ($data['items'] as $rawItem) {
+                $accName = trim($rawItem['account_name'] ?? $rawItem['account'] ?? '');
+                $accId = !empty($rawItem['account_id']) ? $rawItem['account_id'] : null;
+                $dr = floatval($rawItem['debit_amount'] ?? $rawItem['debit'] ?? 0);
+                $cr = floatval($rawItem['credit_amount'] ?? $rawItem['credit'] ?? 0);
+                $memo = trim($rawItem['memo'] ?? $rawItem['description'] ?? $narration);
+
+                if (!empty($accName) || $dr > 0 || $cr > 0) {
+                    $items[] = [
+                        'account_id' => $accId,
+                        'account_name' => $accName,
+                        'debit_amount' => $dr,
+                        'credit_amount' => $cr,
+                        'memo' => $memo
+                    ];
+                }
+            }
         } else {
             $debitAcc = trim($data['debit_account'] ?? $data['debit'] ?? '');
             $creditAcc = trim($data['credit_account'] ?? $data['credit'] ?? '');
@@ -662,9 +678,13 @@ class AccountingService
             }
 
             $items = [
-                ['account_name' => $debitAcc, 'debit_amount' => $amount, 'credit_amount' => 0, 'memo' => $narration],
-                ['account_name' => $creditAcc, 'debit_amount' => 0, 'credit_amount' => $amount, 'memo' => $narration]
+                ['account_id' => null, 'account_name' => $debitAcc, 'debit_amount' => $amount, 'credit_amount' => 0, 'memo' => $narration],
+                ['account_id' => null, 'account_name' => $creditAcc, 'debit_amount' => 0, 'credit_amount' => $amount, 'memo' => $narration]
             ];
+        }
+
+        if (count($items) < 2) {
+            throw new Exception('A journal entry must contain at least 2 line items.');
         }
 
         // Calculate and verify debits == credits

@@ -26,7 +26,9 @@ import {
   Edit2,
   Trash2,
   Eye,
-  Check
+  Check,
+  ArrowLeft,
+  Save
 } from 'lucide-react';
 import { ApiService } from '../services/api';
 import { exportToCsv } from '../utils/exportUtils';
@@ -170,6 +172,28 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
   const [activeJournalActionId, setActiveJournalActionId] = useState<string | null>(null);
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [viewingJournal, setViewingJournal] = useState<any>(null);
+  const [journalViewMode, setJournalViewMode] = useState<'list' | 'add'>('list');
+  const [newJournalForm, setNewJournalForm] = useState<{
+    date: string;
+    journal_number: string;
+    description: string;
+    lines: Array<{
+      id: string;
+      account_name: string;
+      account_id: string;
+      debit: string;
+      credit: string;
+      description: string;
+    }>;
+  }>({
+    date: new Date().toISOString().split('T')[0],
+    journal_number: '',
+    description: '',
+    lines: [
+      { id: 'line-1', account_name: '', account_id: '', debit: '', credit: '', description: '' },
+      { id: 'line-2', account_name: '', account_id: '', debit: '', credit: '', description: '' }
+    ]
+  });
   const [newJournal, setNewJournal] = useState({
     debit_account: '',
     credit_account: '',
@@ -585,6 +609,128 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
   };
 
   // Handlers for Journal
+  const handleAddJournalLine = () => {
+    setNewJournalForm((prev) => ({
+      ...prev,
+      lines: [
+        ...prev.lines,
+        {
+          id: `line-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          account_name: '',
+          account_id: '',
+          debit: '',
+          credit: '',
+          description: ''
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveJournalLine = (index: number) => {
+    if (newJournalForm.lines.length <= 2) {
+      alert('A journal entry must contain at least 2 lines.');
+      return;
+    }
+    setNewJournalForm((prev) => ({
+      ...prev,
+      lines: prev.lines.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleJournalLineChange = (index: number, field: 'account_name' | 'debit' | 'credit' | 'description', value: string) => {
+    setNewJournalForm((prev) => {
+      const updatedLines = [...prev.lines];
+      const currentLine = { ...updatedLines[index] };
+
+      if (field === 'account_name') {
+        currentLine.account_name = value;
+        const matchedAcc = accounts.find((a) => a.name === value);
+        const matchedVh = voteHeads.find((v) => v.name === value);
+        currentLine.account_id = matchedAcc?.id || matchedVh?.id || '';
+      } else {
+        currentLine[field] = value;
+      }
+
+      updatedLines[index] = currentLine;
+      return { ...prev, lines: updatedLines };
+    });
+  };
+
+  const totalJournalDebits = newJournalForm.lines.reduce((sum, line) => sum + (parseFloat(line.debit) || 0), 0);
+  const totalJournalCredits = newJournalForm.lines.reduce((sum, line) => sum + (parseFloat(line.credit) || 0), 0);
+  const isJournalBalanced = Math.abs(totalJournalDebits - totalJournalCredits) < 0.01 && totalJournalDebits > 0;
+
+  const handleSaveMultiLineJournal = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!newJournalForm.date) {
+      alert('Please select an entry date.');
+      return;
+    }
+
+    if (!newJournalForm.description.trim()) {
+      alert('Please enter a Journal Description.');
+      return;
+    }
+
+    const validLines = newJournalForm.lines.filter(l => l.account_name.trim() !== '');
+    if (validLines.length < 2) {
+      alert('Please select an Account Group for at least 2 lines.');
+      return;
+    }
+
+    if (totalJournalDebits <= 0 || totalJournalCredits <= 0) {
+      alert('Please enter valid debit and credit amounts.');
+      return;
+    }
+
+    if (Math.abs(totalJournalDebits - totalJournalCredits) > 0.01) {
+      alert(`Double entry is unbalanced! Total Debits (KES ${totalJournalDebits.toLocaleString('en-KE', { minimumFractionDigits: 2 })}) must equal Total Credits (KES ${totalJournalCredits.toLocaleString('en-KE', { minimumFractionDigits: 2 })}).`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        date: newJournalForm.date,
+        journal_number: newJournalForm.journal_number.trim() || undefined,
+        description: newJournalForm.description.trim(),
+        narration: newJournalForm.description.trim(),
+        items: newJournalForm.lines
+          .filter(l => l.account_name.trim() !== '' || (parseFloat(l.debit) || 0) > 0 || (parseFloat(l.credit) || 0) > 0)
+          .map(l => ({
+            account_id: l.account_id || undefined,
+            account_name: l.account_name,
+            debit_amount: parseFloat(l.debit) || 0,
+            credit_amount: parseFloat(l.credit) || 0,
+            memo: l.description.trim() || newJournalForm.description.trim()
+          }))
+      };
+
+      const res = await ApiService.createJournalEntry(payload);
+      if (res && (res.status === 'success' || res.data)) {
+        alert(`Journal entry saved successfully! ${res.data?.entry_number ? `(${res.data.entry_number})` : ''}`);
+        setNewJournalForm({
+          date: new Date().toISOString().split('T')[0],
+          journal_number: '',
+          description: '',
+          lines: [
+            { id: 'line-1', account_name: '', account_id: '', debit: '', credit: '', description: '' },
+            { id: 'line-2', account_name: '', account_id: '', debit: '', credit: '', description: '' }
+          ]
+        });
+        setJournalViewMode('list');
+        loadAccountingData();
+      } else {
+        alert(res?.message || 'Failed to save journal entry.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error saving journal entry.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleRecordJournal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newJournal.amount || parseFloat(newJournal.amount) <= 0) return;
@@ -1284,247 +1430,469 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
       {/* ========================================================================= */}
       {activeSubTab === 'journal' && (
         <div className="space-y-4 animate-fadeIn">
-          {/* Top Actions Matching Screenshot */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <div>
-              {/* Left empty as per screenshot */}
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <button
-                onClick={() => {
-                  if (voteHeads.length > 0 && accounts.length > 0) {
-                    setNewJournal({
-                      ...newJournal,
-                      debit_account: voteHeads[0].name,
-                      credit_account: accounts[0].name
-                    });
-                  }
-                  setShowJournalModal(true);
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm active:scale-95 transition-all"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ New Journal Entry</span>
-              </button>
-
-              <button
-                onClick={() => window.print()}
-                className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
-                title="Print Journal Register"
-              >
-                <Printer className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() =>
-                  exportToCsv(
-                    'General_Journal_Register',
-                    ['#', 'Journal No', 'Date', 'Description', 'Amount', 'Transaction Type', 'Status'],
-                    journalEntries.map((j, idx) => [
-                      idx + 1,
-                      j.entry_number || j.reference_number || `JNL-${idx + 1000}`,
-                      j.entry_date || j.date || '',
-                      j.narration || j.description || '',
-                      j.total_debit || j.amount || 0,
-                      j.transaction_type || 'JOURNAL',
-                      j.status || 'Not posted'
-                    ])
-                  )
-                }
-                className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
-                title="Export to CSV"
-              >
-                <FileSpreadsheet className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setShowJournalFilter(!showJournalFilter)}
-                className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-bold transition-all ${
-                  showJournalFilter || journalFilterType !== 'ALL'
-                    ? 'bg-sky-500 text-white border-sky-600 shadow-xs'
-                    : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'
-                }`}
-                title="Toggle Filters"
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span>Filter</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Search Box Matching Screenshot */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs space-y-2">
-            <label className="block text-xs font-bold text-slate-700">
-              Journal number
-            </label>
-            <div className="flex items-center gap-2 max-w-md">
-              <input
-                type="text"
-                value={journalSearch}
-                onChange={(e) => setJournalSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setAppliedJournalSearch(journalSearch);
-                  }
-                }}
-                placeholder="Enter all or part of a jo..."
-                className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
-              />
-              <button
-                type="button"
-                onClick={() => setAppliedJournalSearch(journalSearch)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors"
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setJournalSearch('');
-                  setAppliedJournalSearch('');
-                }}
-                className="px-4 py-2 bg-white border border-sky-400 text-sky-700 hover:bg-sky-50 font-bold text-xs rounded-lg shadow-xs transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-
-            {/* Filter drawer if toggled */}
-            {showJournalFilter && (
-              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs">
-                <span className="font-bold text-slate-600">Transaction Type:</span>
-                {['ALL', 'REVERSAL', 'FEE_RECEIPT', 'EXPENSE_VOUCHER', 'MANUAL_JOURNAL'].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setJournalFilterType(t)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
-                      journalFilterType === t
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t.replace('_', ' ')}
-                  </button>
-                ))}
+          {journalViewMode === 'add' ? (
+            /* ========================================================================= */
+            /* ADD JOURNAL FORM (Matching Screenshot media_1789982163576.png) */
+            /* ========================================================================= */
+            <div className="space-y-5 animate-fadeIn">
+              {/* Back / Title Link */}
+              <div className="flex items-center justify-between pb-1">
+                <button
+                  type="button"
+                  onClick={() => setJournalViewMode('list')}
+                  className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 font-bold text-sm bg-emerald-50 hover:bg-emerald-100/80 px-3.5 py-1.5 rounded-lg border border-emerald-200 transition-colors shadow-2xs"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Add journal</span>
+                </button>
               </div>
-            )}
-          </div>
 
-          {/* Table Matching Screenshot */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50/80 text-slate-900 font-bold border-b border-slate-200 text-xs tracking-tight">
-                  <tr>
-                    <th className="py-3.5 px-4 w-12 text-center">#</th>
-                    <th className="py-3.5 px-4">Journal No.</th>
-                    <th className="py-3.5 px-4">Date</th>
-                    <th className="py-3.5 px-4">Journal Description</th>
-                    <th className="py-3.5 px-4 text-right">Amount</th>
-                    <th className="py-3.5 px-4">Transaction Type</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-center w-28">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                  {(() => {
-                    const filtered = journalEntries.filter((j) => {
-                      const searchStr = appliedJournalSearch.toLowerCase();
-                      const jNo = (j.entry_number || j.reference_number || '').toLowerCase();
-                      const desc = (j.narration || j.description || '').toLowerCase();
-                      const type = (j.transaction_type || (j.narration?.toLowerCase().includes('reversal') ? 'REVERSAL' : j.narration?.toLowerCase().includes('fee') ? 'FEE_RECEIPT' : 'MANUAL_JOURNAL')).toUpperCase();
+              {/* Form Header Fields: Date *, Journal No., Journal Description */}
+              <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-xs">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      Date <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        value={newJournalForm.date}
+                        onChange={(e) => setNewJournalForm({ ...newJournalForm, date: e.target.value })}
+                        className="w-full px-3 py-2.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+                        required
+                      />
+                    </div>
+                  </div>
 
-                      const matchSearch = !searchStr || jNo.includes(searchStr) || desc.includes(searchStr);
-                      const matchType = journalFilterType === 'ALL' || type === journalFilterType;
-                      return matchSearch && matchType;
-                    });
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      Journal No.
+                    </label>
+                    <input
+                      type="text"
+                      value={newJournalForm.journal_number}
+                      onChange={(e) => setNewJournalForm({ ...newJournalForm, journal_number: e.target.value })}
+                      placeholder="Enter journal number"
+                      className="w-full px-3 py-2.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+                    />
+                  </div>
 
-                    if (filtered.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                            No journal entries match the search criteria. Click "+ New Journal Entry" above to post an entry.
-                          </td>
-                        </tr>
-                      );
-                    }
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      Journal Description <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newJournalForm.description}
+                      onChange={(e) => setNewJournalForm({ ...newJournalForm, description: e.target.value })}
+                      placeholder="Type description..."
+                      className="w-full px-3 py-2.5 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
 
-                    return filtered.map((j, idx) => {
-                      const amount = parseFloat(j.total_debit || j.total_amount || j.amount || 0);
-                      const formattedAmount = 'KES ' + Number(amount).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-                      const rawDate = j.entry_date || j.date || j.created_at;
-                      const dateObj = rawDate ? new Date(rawDate) : new Date();
-                      const formattedDate = isNaN(dateObj.getTime())
-                        ? rawDate
-                        : `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
-
-                      const inferredType = (
-                        j.transaction_type ||
-                        (j.narration?.toLowerCase().includes('reversal')
-                          ? 'REVERSAL'
-                          : j.narration?.toLowerCase().includes('fee') || j.narration?.toLowerCase().includes('receipt')
-                          ? 'FEE_RECEIPT'
-                          : j.narration?.toLowerCase().includes('expense') || j.narration?.toLowerCase().includes('voucher')
-                          ? 'EXPENSE_VOUCHER'
-                          : 'MANUAL_JOURNAL')
-                      ).toUpperCase();
-
-                      const displayStatus = j.status === 'POSTED' || j.status === 'APPROVED' ? 'Posted' : 'Not posted';
-
-                      return (
-                        <tr key={j.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-4 px-4 text-center font-bold text-slate-900">
+              {/* Multi-Line Journal Items Table */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-900 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-3 w-10 text-center text-slate-500">#</th>
+                        <th className="py-3 px-4 min-w-[260px]">Account Group</th>
+                        <th className="py-3 px-4 w-44">Debit</th>
+                        <th className="py-3 px-4 w-44">Credit</th>
+                        <th className="py-3 px-4 min-w-[220px]">Description</th>
+                        <th className="py-3 px-3 w-12 text-center"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {newJournalForm.lines.map((line, idx) => (
+                        <tr key={line.id || idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-3 text-center font-bold text-slate-600">
                             {idx + 1}
                           </td>
-                          <td className="py-4 px-4 font-mono font-bold text-slate-900">
-                            {j.entry_number || j.reference_number || `JNL-${1248 - idx}`}
+                          <td className="py-3 px-4">
+                            <select
+                              value={line.account_name}
+                              onChange={(e) => handleJournalLineChange(idx, 'account_name', e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800 bg-white"
+                            >
+                              <option value="">Select account type</option>
+                              <optgroup label="🏦 Bank Accounts">
+                                {accounts
+                                  .filter((a) => !a.is_cash_account)
+                                  .map((a) => (
+                                    <option key={`bank-${a.id}`} value={a.name}>
+                                      {a.name} ({a.bank_name || 'Bank'} - {a.account_number || ''})
+                                    </option>
+                                  ))}
+                              </optgroup>
+                              <optgroup label="💵 Cash Accounts">
+                                {accounts
+                                  .filter((a) => a.is_cash_account)
+                                  .map((a) => (
+                                    <option key={`cash-${a.id}`} value={a.name}>
+                                      {a.name}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                              <optgroup label="📑 Vote Heads / Expenditure">
+                                {voteHeads.map((vh) => (
+                                  <option key={`vh-${vh.id}`} value={vh.name}>
+                                    {vh.name} {vh.account_code ? `(${vh.account_code})` : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="📁 Account Types">
+                                {accountTypes.map((at) => (
+                                  <option key={`at-${at.id}`} value={at.name}>
+                                    {at.name} {at.code ? `(${at.code})` : ''}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
                           </td>
-                          <td className="py-4 px-4 font-medium text-slate-700">
-                            {formattedDate}
+                          <td className="py-3 px-4">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={line.debit}
+                              onChange={(e) => handleJournalLineChange(idx, 'debit', e.target.value)}
+                              placeholder="debits"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-mono font-medium text-slate-800 text-right"
+                            />
                           </td>
-                          <td className="py-4 px-4 font-medium text-slate-900">
-                            {j.narration || j.description || 'General Journal Entry'}
+                          <td className="py-3 px-4">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={line.credit}
+                              onChange={(e) => handleJournalLineChange(idx, 'credit', e.target.value)}
+                              placeholder="credits"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-mono font-medium text-slate-800 text-right"
+                            />
                           </td>
-                          <td className="py-4 px-4 text-right font-mono font-bold text-slate-900">
-                            {formattedAmount}
+                          <td className="py-3 px-4">
+                            <input
+                              type="text"
+                              value={line.description}
+                              onChange={(e) => handleJournalLineChange(idx, 'description', e.target.value)}
+                              placeholder="description"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+                            />
                           </td>
-                          <td className="py-4 px-4 font-mono font-bold text-[11px] text-slate-700 uppercase">
-                            {inferredType}
-                          </td>
-                          <td className="py-4 px-4 text-slate-700">
-                            <span className="text-xs font-semibold">
-                              {displayStatus}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4 text-center">
+                          <td className="py-3 px-3 text-center">
                             <button
                               type="button"
-                              onClick={() => setViewingJournal(j)}
-                              className="px-3 py-1 border border-emerald-500 text-emerald-700 hover:bg-emerald-50 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1 mx-auto shadow-2xs"
+                              onClick={() => handleRemoveJournalLine(idx)}
+                              disabled={newJournalForm.lines.length <= 2}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                newJournalForm.lines.length <= 2
+                                  ? 'text-slate-300 cursor-not-allowed'
+                                  : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                              }`}
+                              title={newJournalForm.lines.length <= 2 ? 'Minimum 2 lines required' : 'Remove line'}
                             >
-                              <span>Action</span>
-                              <ChevronDown className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-            {/* Pagination footer */}
-            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <div>
-                Showing <span className="font-bold text-slate-700">{journalEntries.length}</span> total entries
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Items per page: 50</span>
+                {/* Bottom Bar: Add Line, Totals, Save Button */}
+                <div className="p-4 bg-slate-50/80 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={handleAddJournalLine}
+                    className="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 font-bold text-xs bg-white border border-emerald-300 hover:bg-emerald-50 px-3.5 py-2 rounded-lg shadow-2xs transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add another line</span>
+                  </button>
+
+                  <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-2xs">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Total</span>
+                    <div className="flex items-center gap-3 font-mono text-xs">
+                      <span className="font-bold text-slate-900">
+                        Debit: <span className="text-emerald-700">KES {totalJournalDebits.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </span>
+                      <span className="text-slate-300">|</span>
+                      <span className="font-bold text-slate-900">
+                        Credit: <span className="text-emerald-700">KES {totalJournalCredits.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </span>
+                    </div>
+                    {totalJournalDebits > 0 && (
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isJournalBalanced
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200'
+                        }`}
+                      >
+                        {isJournalBalanced ? '✓ Balanced' : '⚠ Unbalanced'}
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveMultiLineJournal}
+                    disabled={submitting}
+                    className="flex items-center gap-2 px-7 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{submitting ? 'Saving...' : 'Save'}</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* ========================================================================= */
+            /* JOURNAL REGISTER LIST VIEW */
+            /* ========================================================================= */
+            <div className="space-y-4">
+              {/* Top Actions Matching Screenshot */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div>
+                  {/* Left empty as per screenshot */}
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    onClick={() => setJournalViewMode('add')}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm active:scale-95 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ New Journal Entry</span>
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
+                    title="Print Journal Register"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      exportToCsv(
+                        'General_Journal_Register',
+                        ['#', 'Journal No', 'Date', 'Description', 'Amount', 'Transaction Type', 'Status'],
+                        journalEntries.map((j, idx) => [
+                          idx + 1,
+                          j.entry_number || j.reference_number || `JNL-${idx + 1000}`,
+                          j.entry_date || j.date || '',
+                          j.narration || j.description || '',
+                          j.total_debit || j.amount || 0,
+                          j.transaction_type || 'JOURNAL',
+                          j.status || 'Not posted'
+                        ])
+                      )
+                    }
+                    className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
+                    title="Export to CSV"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => setShowJournalFilter(!showJournalFilter)}
+                    className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-bold transition-all ${
+                      showJournalFilter || journalFilterType !== 'ALL'
+                        ? 'bg-sky-500 text-white border-sky-600 shadow-xs'
+                        : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'
+                    }`}
+                    title="Toggle Filters"
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Filter</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Box Matching Screenshot */}
+              <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  Journal number
+                </label>
+                <div className="flex items-center gap-2 max-w-md">
+                  <input
+                    type="text"
+                    value={journalSearch}
+                    onChange={(e) => setJournalSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setAppliedJournalSearch(journalSearch);
+                      }
+                    }}
+                    placeholder="Enter all or part of a jo..."
+                    className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAppliedJournalSearch(journalSearch)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors"
+                  >
+                    Search
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJournalSearch('');
+                      setAppliedJournalSearch('');
+                    }}
+                    className="px-4 py-2 bg-white border border-sky-400 text-sky-700 hover:bg-sky-50 font-bold text-xs rounded-lg shadow-xs transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {/* Filter drawer if toggled */}
+                {showJournalFilter && (
+                  <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs">
+                    <span className="font-bold text-slate-600">Transaction Type:</span>
+                    {['ALL', 'REVERSAL', 'FEE_RECEIPT', 'EXPENSE_VOUCHER', 'MANUAL_JOURNAL'].map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setJournalFilterType(t)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                          journalFilterType === t
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {t.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Table Matching Screenshot */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/80 text-slate-900 font-bold border-b border-slate-200 text-xs tracking-tight">
+                      <tr>
+                        <th className="py-3.5 px-4 w-12 text-center">#</th>
+                        <th className="py-3.5 px-4">Journal No.</th>
+                        <th className="py-3.5 px-4">Date</th>
+                        <th className="py-3.5 px-4">Journal Description</th>
+                        <th className="py-3.5 px-4 text-right">Amount</th>
+                        <th className="py-3.5 px-4">Transaction Type</th>
+                        <th className="py-3.5 px-4">Status</th>
+                        <th className="py-3.5 px-4 text-center w-28">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                      {(() => {
+                        const filtered = journalEntries.filter((j) => {
+                          const searchStr = appliedJournalSearch.toLowerCase();
+                          const jNo = (j.entry_number || j.reference_number || '').toLowerCase();
+                          const desc = (j.narration || j.description || '').toLowerCase();
+                          const type = (j.transaction_type || (j.narration?.toLowerCase().includes('reversal') ? 'REVERSAL' : j.narration?.toLowerCase().includes('fee') ? 'FEE_RECEIPT' : 'MANUAL_JOURNAL')).toUpperCase();
+
+                          const matchSearch = !searchStr || jNo.includes(searchStr) || desc.includes(searchStr);
+                          const matchType = journalFilterType === 'ALL' || type === journalFilterType;
+                          return matchSearch && matchType;
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                                No journal entries match the search criteria. Click "+ New Journal Entry" above to post an entry.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((j, idx) => {
+                          const amount = parseFloat(j.total_debit || j.total_amount || j.amount || 0);
+                          const formattedAmount = 'KES ' + Number(amount).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                          const rawDate = j.entry_date || j.date || j.created_at;
+                          const dateObj = rawDate ? new Date(rawDate) : new Date();
+                          const formattedDate = isNaN(dateObj.getTime())
+                            ? rawDate
+                            : `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+
+                          const inferredType = (
+                            j.transaction_type ||
+                            (j.narration?.toLowerCase().includes('reversal')
+                              ? 'REVERSAL'
+                              : j.narration?.toLowerCase().includes('fee') || j.narration?.toLowerCase().includes('receipt')
+                              ? 'FEE_RECEIPT'
+                              : j.narration?.toLowerCase().includes('expense') || j.narration?.toLowerCase().includes('voucher')
+                              ? 'EXPENSE_VOUCHER'
+                              : 'MANUAL_JOURNAL')
+                          ).toUpperCase();
+
+                          const displayStatus = j.status === 'POSTED' || j.status === 'APPROVED' ? 'Posted' : 'Not posted';
+
+                          return (
+                            <tr key={j.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-4 px-4 text-center font-bold text-slate-900">
+                                {idx + 1}
+                              </td>
+                              <td className="py-4 px-4 font-mono font-bold text-slate-900">
+                                {j.entry_number || j.reference_number || `JNL-${1248 - idx}`}
+                              </td>
+                              <td className="py-4 px-4 font-medium text-slate-700">
+                                {formattedDate}
+                              </td>
+                              <td className="py-4 px-4 font-medium text-slate-900">
+                                {j.narration || j.description || 'General Journal Entry'}
+                              </td>
+                              <td className="py-4 px-4 text-right font-mono font-bold text-slate-900">
+                                {formattedAmount}
+                              </td>
+                              <td className="py-4 px-4 font-mono font-bold text-[11px] text-slate-700 uppercase">
+                                {inferredType}
+                              </td>
+                              <td className="py-4 px-4 text-slate-700">
+                                <span className="text-xs font-semibold">
+                                  {displayStatus}
+                                </span>
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingJournal(j)}
+                                  className="px-3 py-1 border border-emerald-500 text-emerald-700 hover:bg-emerald-50 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1 mx-auto shadow-2xs"
+                                >
+                                  <span>Action</span>
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination footer */}
+                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <div>
+                    Showing <span className="font-bold text-slate-700">{journalEntries.length}</span> total entries
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span>Items per page: 50</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
