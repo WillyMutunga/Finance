@@ -414,7 +414,7 @@ class AuthController
 
             $stmt = $this->db->prepare("
                 SELECT * FROM auth_otps
-                WHERE temp_token = :temp_token AND (is_used = 0 OR is_used = FALSE)
+                WHERE temp_token = :temp_token AND is_used = FALSE
                 ORDER BY created_at DESC LIMIT 1
             ");
             $stmt->execute([':temp_token' => $tempToken]);
@@ -447,7 +447,7 @@ class AuthController
             }
 
             // Mark OTP as used
-            $this->db->prepare("UPDATE auth_otps SET is_used = 1 WHERE id = :id")->execute([':id' => $record['id']]);
+            $this->db->prepare("UPDATE auth_otps SET is_used = TRUE WHERE id = :id")->execute([':id' => $record['id']]);
 
             // Resolve user
             $user = null;
