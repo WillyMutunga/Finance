@@ -163,6 +163,11 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
 
   // 7. Journal Entries State
   const [journalEntries, setJournalEntries] = useState<any[]>([]);
+  const [journalSearch, setJournalSearch] = useState('');
+  const [appliedJournalSearch, setAppliedJournalSearch] = useState('');
+  const [journalFilterType, setJournalFilterType] = useState('ALL');
+  const [showJournalFilter, setShowJournalFilter] = useState(false);
+  const [activeJournalActionId, setActiveJournalActionId] = useState<string | null>(null);
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [viewingJournal, setViewingJournal] = useState<any>(null);
   const [newJournal, setNewJournal] = useState({
@@ -171,7 +176,8 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
     amount: '',
     date: new Date().toISOString().split('T')[0],
     narration: '',
-    reference: ''
+    reference: '',
+    transaction_type: 'MANUAL_JOURNAL'
   });
 
   // 8. General Ledger State
@@ -601,7 +607,8 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
           amount: '',
           date: new Date().toISOString().split('T')[0],
           narration: '',
-          reference: ''
+          reference: '',
+          transaction_type: 'MANUAL_JOURNAL'
         });
         alert(`Journal entry posted successfully with Entry No: ${res.data.entry_number}`);
       }
@@ -1277,79 +1284,246 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
       {/* ========================================================================= */}
       {activeSubTab === 'journal' && (
         <div className="space-y-4 animate-fadeIn">
-          <div className="flex items-center justify-between pt-1">
+          {/* Top Actions Matching Screenshot */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">General Journal</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Manual double-entry adjustments, non-cash transactions, and compensating entries</p>
+              {/* Left empty as per screenshot */}
             </div>
 
-            <button
-              onClick={() => {
-                if (voteHeads.length > 0 && accounts.length > 0) {
-                  setNewJournal({
-                    ...newJournal,
-                    debit_account: voteHeads[0].name,
-                    credit_account: accounts[0].name
-                  });
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                onClick={() => {
+                  if (voteHeads.length > 0 && accounts.length > 0) {
+                    setNewJournal({
+                      ...newJournal,
+                      debit_account: voteHeads[0].name,
+                      credit_account: accounts[0].name
+                    });
+                  }
+                  setShowJournalModal(true);
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ New Journal Entry</span>
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
+                title="Print Journal Register"
+              >
+                <Printer className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() =>
+                  exportToCsv(
+                    'General_Journal_Register',
+                    ['#', 'Journal No', 'Date', 'Description', 'Amount', 'Transaction Type', 'Status'],
+                    journalEntries.map((j, idx) => [
+                      idx + 1,
+                      j.entry_number || j.reference_number || `JNL-${idx + 1000}`,
+                      j.entry_date || j.date || '',
+                      j.narration || j.description || '',
+                      j.total_debit || j.amount || 0,
+                      j.transaction_type || 'JOURNAL',
+                      j.status || 'Not posted'
+                    ])
+                  )
                 }
-                setShowJournalModal(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-sm active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ New Journal Entry</span>
-            </button>
+                className="p-2 bg-white border border-sky-200 hover:bg-sky-50 rounded-lg text-sky-600 shadow-xs transition-colors"
+                title="Export to CSV"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setShowJournalFilter(!showJournalFilter)}
+                className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-bold transition-all ${
+                  showJournalFilter || journalFilterType !== 'ALL'
+                    ? 'bg-sky-500 text-white border-sky-600 shadow-xs'
+                    : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'
+                }`}
+                title="Toggle Filters"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Filter</span>
+              </button>
+            </div>
           </div>
 
+          {/* Search Box Matching Screenshot */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-xs space-y-2">
+            <label className="block text-xs font-bold text-slate-700">
+              Journal number
+            </label>
+            <div className="flex items-center gap-2 max-w-md">
+              <input
+                type="text"
+                value={journalSearch}
+                onChange={(e) => setJournalSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setAppliedJournalSearch(journalSearch);
+                  }
+                }}
+                placeholder="Enter all or part of a jo..."
+                className="flex-1 px-3 py-2 text-xs rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 font-medium text-slate-800"
+              />
+              <button
+                type="button"
+                onClick={() => setAppliedJournalSearch(journalSearch)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition-colors"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setJournalSearch('');
+                  setAppliedJournalSearch('');
+                }}
+                className="px-4 py-2 bg-white border border-sky-400 text-sky-700 hover:bg-sky-50 font-bold text-xs rounded-lg shadow-xs transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+
+            {/* Filter drawer if toggled */}
+            {showJournalFilter && (
+              <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs">
+                <span className="font-bold text-slate-600">Transaction Type:</span>
+                {['ALL', 'REVERSAL', 'FEE_RECEIPT', 'EXPENSE_VOUCHER', 'MANUAL_JOURNAL'].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setJournalFilterType(t)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      journalFilterType === t
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Table Matching Screenshot */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Entry Number</th>
-                  <th className="py-3 px-4">Reference</th>
-                  <th className="py-3 px-4">Narration / Justification</th>
-                  <th className="py-3 px-4 text-right">Debit (DR)</th>
-                  <th className="py-3 px-4 text-right">Credit (CR)</th>
-                  <th className="py-3 px-4 text-center">Status</th>
-                  <th className="py-3 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {journalEntries.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-900 font-bold border-b border-slate-200 text-xs tracking-tight">
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
-                      No general journal entries posted yet. Click "+ New Journal Entry" above.
-                    </td>
+                    <th className="py-3.5 px-4 w-12 text-center">#</th>
+                    <th className="py-3.5 px-4">Journal No.</th>
+                    <th className="py-3.5 px-4">Date</th>
+                    <th className="py-3.5 px-4">Journal Description</th>
+                    <th className="py-3.5 px-4 text-right">Amount</th>
+                    <th className="py-3.5 px-4">Transaction Type</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-center w-28">Actions</th>
                   </tr>
-                ) : (
-                  journalEntries.map((j) => (
-                    <tr key={j.id} className="hover:bg-slate-50">
-                      <td className="py-3.5 px-4 font-mono">{j.entry_date}</td>
-                      <td className="py-3.5 px-4 font-mono font-bold text-sky-800">{j.entry_number}</td>
-                      <td className="py-3.5 px-4 font-mono text-slate-600">{j.reference_number}</td>
-                      <td className="py-3.5 px-4 font-medium text-slate-800">{j.narration}</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-rose-700">{formatCurrency(j.total_debit)}</td>
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-700">{formatCurrency(j.total_credit)}</td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-full">
-                          {j.status || 'POSTED'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => setViewingJournal(j)}
-                          className="p-1 hover:bg-slate-100 text-slate-600 rounded"
-                          title="View Journal Lines"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                  {(() => {
+                    const filtered = journalEntries.filter((j) => {
+                      const searchStr = appliedJournalSearch.toLowerCase();
+                      const jNo = (j.entry_number || j.reference_number || '').toLowerCase();
+                      const desc = (j.narration || j.description || '').toLowerCase();
+                      const type = (j.transaction_type || (j.narration?.toLowerCase().includes('reversal') ? 'REVERSAL' : j.narration?.toLowerCase().includes('fee') ? 'FEE_RECEIPT' : 'MANUAL_JOURNAL')).toUpperCase();
+
+                      const matchSearch = !searchStr || jNo.includes(searchStr) || desc.includes(searchStr);
+                      const matchType = journalFilterType === 'ALL' || type === journalFilterType;
+                      return matchSearch && matchType;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
+                            No journal entries match the search criteria. Click "+ New Journal Entry" above to post an entry.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((j, idx) => {
+                      const amount = parseFloat(j.total_debit || j.total_amount || j.amount || 0);
+                      const formattedAmount = 'KES ' + Number(amount).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                      const rawDate = j.entry_date || j.date || j.created_at;
+                      const dateObj = rawDate ? new Date(rawDate) : new Date();
+                      const formattedDate = isNaN(dateObj.getTime())
+                        ? rawDate
+                        : `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+
+                      const inferredType = (
+                        j.transaction_type ||
+                        (j.narration?.toLowerCase().includes('reversal')
+                          ? 'REVERSAL'
+                          : j.narration?.toLowerCase().includes('fee') || j.narration?.toLowerCase().includes('receipt')
+                          ? 'FEE_RECEIPT'
+                          : j.narration?.toLowerCase().includes('expense') || j.narration?.toLowerCase().includes('voucher')
+                          ? 'EXPENSE_VOUCHER'
+                          : 'MANUAL_JOURNAL')
+                      ).toUpperCase();
+
+                      const displayStatus = j.status === 'POSTED' || j.status === 'APPROVED' ? 'Posted' : 'Not posted';
+
+                      return (
+                        <tr key={j.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-4 px-4 text-center font-bold text-slate-900">
+                            {idx + 1}
+                          </td>
+                          <td className="py-4 px-4 font-mono font-bold text-slate-900">
+                            {j.entry_number || j.reference_number || `JNL-${1248 - idx}`}
+                          </td>
+                          <td className="py-4 px-4 font-medium text-slate-700">
+                            {formattedDate}
+                          </td>
+                          <td className="py-4 px-4 font-medium text-slate-900">
+                            {j.narration || j.description || 'General Journal Entry'}
+                          </td>
+                          <td className="py-4 px-4 text-right font-mono font-bold text-slate-900">
+                            {formattedAmount}
+                          </td>
+                          <td className="py-4 px-4 font-mono font-bold text-[11px] text-slate-700 uppercase">
+                            {inferredType}
+                          </td>
+                          <td className="py-4 px-4 text-slate-700">
+                            <span className="text-xs font-semibold">
+                              {displayStatus}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setViewingJournal(j)}
+                              className="px-3 py-1 border border-emerald-500 text-emerald-700 hover:bg-emerald-50 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-1 mx-auto shadow-2xs"
+                            >
+                              <span>Action</span>
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination footer */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between text-xs text-slate-500 font-medium">
+              <div>
+                Showing <span className="font-bold text-slate-700">{journalEntries.length}</span> total entries
+              </div>
+              <div className="flex items-center gap-2">
+                <span>Items per page: 50</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
