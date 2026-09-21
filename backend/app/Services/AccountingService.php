@@ -249,6 +249,9 @@ class AccountingService
         $bankName = trim($data['bank_name'] ?? '');
         $branch = trim($data['branch'] ?? '');
         $accountType = trim($data['account_type'] ?? '');
+        $accountTypeId = !empty($data['account_type_id']) ? $data['account_type_id'] : null;
+        $currency = trim($data['currency'] ?? 'KES');
+        $isCash = isset($data['is_cash_account']) ? (!empty($data['is_cash_account']) ? 'true' : 'false') : null;
         $status = trim($data['status'] ?? 'ACTIVE');
 
         if (empty($name) || empty($accountNumber)) {
@@ -257,19 +260,31 @@ class AccountingService
 
         $stmt = $this->db->prepare("
             UPDATE accounts
-            SET name = :name, account_number = :account_number, bank_name = :bank_name, branch = :branch, account_type = :account_type, status = :status, updated_at = CURRENT_TIMESTAMP
+            SET name = :name,
+                account_number = :account_number,
+                bank_name = :bank_name,
+                branch = :branch,
+                account_type = :account_type,
+                account_type_id = COALESCE(:account_type_id, account_type_id),
+                currency = :currency,
+                is_cash_account = COALESCE(:is_cash, is_cash_account),
+                status = :status,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = :id AND school_id = :school_id
             RETURNING *
         ");
         $stmt->execute([
-            ':id'             => $id,
-            ':school_id'      => $schoolId,
-            ':name'           => $name,
-            ':account_number' => $accountNumber,
-            ':bank_name'      => $bankName,
-            ':branch'         => $branch,
-            ':account_type'   => $accountType,
-            ':status'         => $status
+            ':id'              => $id,
+            ':school_id'       => $schoolId,
+            ':name'            => $name,
+            ':account_number'  => $accountNumber,
+            ':bank_name'       => $bankName,
+            ':branch'          => $branch,
+            ':account_type'    => $accountType,
+            ':account_type_id' => $accountTypeId,
+            ':currency'        => $currency,
+            ':is_cash'         => $isCash,
+            ':status'          => $status
         ]);
         $res = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$res) {
