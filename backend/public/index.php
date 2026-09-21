@@ -725,6 +725,8 @@ try {
         (new \App\Controllers\SchoolController())->getSchool($matches[1]);
     } elseif (preg_match('#^/admin/schools/([a-zA-Z0-9\-]+)$#', $uri, $matches) && ($method === 'PUT' || $method === 'POST')) {
         (new \App\Controllers\SchoolController())->updateSchool($matches[1]);
+    } elseif (preg_match('#^/admin/schools/([a-zA-Z0-9\-]+)$#', $uri, $matches) && $method === 'DELETE') {
+        (new \App\Controllers\SchoolController())->deleteSchool($matches[1]);
     }
 
     // 30. School User Management & Access Control

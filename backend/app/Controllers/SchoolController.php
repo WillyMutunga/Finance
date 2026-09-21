@@ -301,7 +301,7 @@ class SchoolController
                 ':email'     => $email,
                 ':phone'     => $phone,
                 ':address'   => $address,
-                ':is_active' => $isActive ? 1 : 0,
+                ':is_active' => $isActive ? 'true' : 'false',
                 ':id'        => $id
             ]);
             $updated = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -320,6 +320,79 @@ class SchoolController
         } catch (\Exception $e) {
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * DELETE /admin/schools/:id
+     * Safely delete a school tenant and its associated isolated entities
+     */
+    public function deleteSchool(string $id): void
+    {
+        try {
+            if ($id === 'a0000000-0000-0000-0000-000000000001') {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'Primary default school cannot be deleted.']);
+                return;
+            }
+
+            $check = $this->db->prepare("SELECT * FROM schools WHERE id = :id");
+            $check->execute([':id' => $id]);
+            $school = $check->fetch(PDO::FETCH_ASSOC);
+
+            if (!$school) {
+                http_response_code(404);
+                echo json_encode(['status' => 'error', 'message' => 'School not found.']);
+                return;
+            }
+
+            // Find all tables that have a school_id column
+            $stmtCols = $this->db->query("
+                SELECT table_name 
+                FROM information_schema.columns 
+                WHERE column_name = 'school_id' AND table_schema = 'public'
+            ");
+            $tablesWithSchoolId = $stmtCols->fetchAll(PDO::FETCH_COLUMN);
+
+            // Delete in reverse topological order (children first)
+            $order = [
+                'auth_otps', 'sms_configs', 'daily_ration_logs', 'meal_menus', 'clearance_requests',
+                'sponsor_allocations', 'sponsors', 'sibling_discount_rules', 'academic_promotions',
+                'bank_reconciliation_reports', 'bank_statement_lines', 'bank_statements', 'stk_attempts',
+                'bank_integrations', 'donations', 'donors', 'other_income_take_ons', 'other_income_invoices',
+                'other_income_receipts', 'other_income_customers', 'other_income_categories',
+                'petty_cash_entries', 'fee_refunds', 'supplier_take_ons', 'supplier_bills',
+                'local_purchase_orders', 'suppliers', 'payment_reversals', 'grants', 'payments_in_kind',
+                'fee_adjustments', 'bursaries', 'student_group_members', 'student_groups', 'sms_logs',
+                'audit_logs', 'expense_vouchers', 'expense_categories', 'pledges', 'reconciliation_matches',
+                'receipts', 'bank_transactions', 'chart_of_accounts', 'account_types', 'inventory_transactions',
+                'inventory_items', 'inventory_categories', 'stores', 'general_ledger', 'journal_entry_lines',
+                'journal_entries', 'budget_items', 'budgets', 'bank_accounts', 'payments', 'expenses',
+                'invoices', 'students', 'classes', 'streams', 'users', 'terms', 'academic_years', 'vote_heads'
+            ];
+
+            foreach ($order as $tbl) {
+                if (in_array($tbl, $tablesWithSchoolId)) {
+                    $this->db->exec("DELETE FROM {$tbl} WHERE school_id = '{$id}'");
+                }
+            }
+
+            foreach ($tablesWithSchoolId as $tbl) {
+                if (!in_array($tbl, $order)) {
+                    $this->db->exec("DELETE FROM {$tbl} WHERE school_id = '{$id}'");
+                }
+            }
+
+            $stmtDel = $this->db->prepare("DELETE FROM schools WHERE id = :id");
+            $stmtDel->execute([':id' => $id]);
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => "School '{$school['name']}' and its associated records were successfully deleted."
+            ]);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => 'Failed to delete school: ' . $e->getMessage()]);
         }
     }
 

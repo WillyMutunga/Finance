@@ -2037,6 +2037,12 @@ export class ApiService {
     });
   }
 
+  static async deleteSchool(id: string) {
+    return this.request<{ status: string; message: string }>(`/admin/schools/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Fallback demo state simulation
   private static mockFallback<T>(endpoint: string, options: RequestInit): T {
     if (endpoint.includes('/dashboard')) {

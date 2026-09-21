@@ -20,7 +20,8 @@ import {
   ExternalLink,
   Edit,
   X,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react';
 
 interface SchoolsManagementViewProps {
@@ -123,6 +124,24 @@ export const SchoolsManagementView: React.FC<SchoolsManagementViewProps> = ({ on
       showToast(err.message || 'Failed to onboard school', 'error');
     } finally {
       setOnboarding(false);
+    }
+  };
+
+  const [schoolToDelete, setSchoolToDelete] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDeleteSchool = async () => {
+    if (!schoolToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await ApiService.deleteSchool(schoolToDelete.id);
+      showToast(res.message || `School '${schoolToDelete.name}' deleted successfully!`, 'success');
+      setSchoolToDelete(null);
+      loadSchools();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete school', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -329,7 +348,7 @@ export const SchoolsManagementView: React.FC<SchoolsManagementViewProps> = ({ on
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2.5">
                 <button
                   onClick={() => handleSwitchContext(school)}
                   disabled={isCurrentActive}
@@ -349,11 +368,54 @@ export const SchoolsManagementView: React.FC<SchoolsManagementViewProps> = ({ on
                     </>
                   )}
                 </button>
+
+                {school.id !== 'a0000000-0000-0000-0000-000000000001' && (
+                  <button
+                    onClick={() => setSchoolToDelete(school)}
+                    className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200/60 transition-colors"
+                    title={`Delete '${school.name}'`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {schoolToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 p-6 space-y-4 animate-scaleUp">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-800">Delete School Workspace?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Are you sure you want to permanently delete <strong className="text-slate-800">{schoolToDelete.name}</strong> (@{schoolToDelete.slug || schoolToDelete.subdomain})? All associated users, terms, vote heads, and records for this school will be removed.
+              </p>
+            </div>
+            <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
+              <button
+                onClick={() => setSchoolToDelete(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteSchool}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+              >
+                {deleting ? 'Deleting...' : 'Yes, Delete School'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ONBOARD NEW SCHOOL MODAL */}
       {showOnboardModal && (
