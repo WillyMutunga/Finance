@@ -12,6 +12,42 @@ class SchoolController
     public function __construct()
     {
         $this->db = Database::getConnection();
+        $this->ensureSchema();
+    }
+
+    public function ensureSchema(): void
+    {
+        $sqls = [
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS code VARCHAR(100)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS motto VARCHAR(255)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS county VARCHAR(100)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS currency VARCHAR(20) DEFAULT 'KES'",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS mpesa_paybill VARCHAR(50)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS address TEXT",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS sms_sender_id VARCHAR(50)",
+            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_school_admin BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
+            "ALTER TABLE vote_heads ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
+            "ALTER TABLE academic_years ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
+            "ALTER TABLE terms ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
+            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key",
+            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key",
+            "UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE (slug IS NULL OR slug = '') AND id = 'a0000000-0000-0000-0000-000000000001'",
+            "UPDATE users SET school_id = 'a0000000-0000-0000-0000-000000000001' WHERE school_id IS NULL"
+        ];
+        foreach ($sqls as $sql) {
+            try {
+                $this->db->exec($sql);
+            } catch (\Throwable $e) {
+                // Ignore fallback
+            }
+        }
     }
 
     /**
