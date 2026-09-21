@@ -66,9 +66,62 @@ class Database
                     // ignore if parameter not recognized
                 }
             }
+
+            if (self::$instance !== null) {
+                self::ensureSchema(self::$instance);
+            }
         }
 
         return self::$instance;
+    }
+
+    public static function ensureSchema(PDO $db): void
+    {
+        try { $db->exec("ALTER TABLE schools ADD COLUMN slug VARCHAR(100)"); } catch (\Throwable $e) {}
+        try { $db->exec("ALTER TABLE schools ADD COLUMN subdomain VARCHAR(100)"); } catch (\Throwable $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN username VARCHAR(100)"); } catch (\Throwable $e) {}
+        try { $db->exec("ALTER TABLE users ADD COLUMN is_school_admin BOOLEAN DEFAULT FALSE"); } catch (\Throwable $e) {}
+
+        try { $db->exec("UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE slug IS NULL"); } catch (\Throwable $e) {}
+        try { $db->exec("UPDATE users SET username = 'willy' WHERE (email = 'accounts@nduundune.ac.ke' OR role = 'super_admin') AND username IS NULL"); } catch (\Throwable $e) {}
+        try { $db->exec("UPDATE users SET username = 'kioko' WHERE (email LIKE 'kioko%' OR name ILIKE '%mbithi%' OR name ILIKE '%kioko%') AND username IS NULL"); } catch (\Throwable $e) {}
+        try { $db->exec("UPDATE users SET username = 'nicholas' WHERE (email LIKE 'nicholas%' OR role = 'head_teacher') AND username IS NULL"); } catch (\Throwable $e) {}
+
+        try {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS auth_otps (
+                    id VARCHAR(64) PRIMARY KEY,
+                    school_id VARCHAR(64),
+                    user_id VARCHAR(64),
+                    identifier VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    otp_code VARCHAR(12) NOT NULL,
+                    purpose VARCHAR(50) DEFAULT 'LOGIN_2FA',
+                    temp_token VARCHAR(128) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    is_used BOOLEAN DEFAULT FALSE,
+                    attempts INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+            $db->exec("CREATE INDEX IF NOT EXISTS idx_auth_otps_token ON auth_otps(temp_token)");
+            $db->exec("CREATE INDEX IF NOT EXISTS idx_auth_otps_identifier ON auth_otps(identifier)");
+        } catch (\Throwable $e) {}
+
+        try {
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS sms_configs (
+                    id VARCHAR(64) PRIMARY KEY,
+                    school_id VARCHAR(64) NOT NULL,
+                    provider VARCHAR(50) DEFAULT 'africastalking',
+                    api_key VARCHAR(255),
+                    username VARCHAR(100),
+                    sender_id VARCHAR(50),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (\Throwable $e) {}
     }
 
     public static function setTenantId(string $tenantId): void

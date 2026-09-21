@@ -30,14 +30,12 @@ class UserController
             $status = $_GET['status'] ?? null;
 
             // Fetch school details
-            $schoolStmt = $this->db->prepare("SELECT id, name, slug, subdomain FROM schools WHERE id = :school_id");
+            $schoolStmt = $this->db->prepare("SELECT * FROM schools WHERE id = :school_id");
             $schoolStmt->execute([':school_id' => $schoolId]);
             $school = $schoolStmt->fetch(PDO::FETCH_ASSOC);
-            $schoolSlug = $school['slug'] ?? $school['subdomain'] ?? 'nduundune';
+            $schoolSlug = $school['slug'] ?? $school['subdomain'] ?? (isset($school['name']) ? strtolower(explode(' ', $school['name'])[0]) : 'nduundune');
 
-            $sql = "SELECT id, school_id, name, username, email, phone, role, is_active, is_school_admin, last_login_at, created_at, updated_at 
-                    FROM users 
-                    WHERE (school_id = :school_id OR school_id IS NULL)";
+            $sql = "SELECT * FROM users WHERE (school_id = :school_id OR school_id IS NULL)";
             
             if ($status === 'active') {
                 $sql .= " AND is_active = true";
@@ -53,10 +51,11 @@ class UserController
 
             // Format for frontend
             $formatted = array_map(function ($u) use ($schoolSlug, $school) {
-                $userPart = $u['username'] ?: explode('@', $u['email'])[0];
-                $displayUsername = (strpos($u['email'], '@') !== false && !strpos($u['email'], '.ac.ke') && !strpos($u['email'], '.com'))
+                $rawUser = $u['username'] ?? '';
+                $userPart = !empty($rawUser) ? $rawUser : explode('@', $u['email'] ?? 'user')[0];
+                $displayUsername = (strpos($u['email'] ?? '', '@') !== false && !strpos($u['email'], '.ac.ke') && !strpos($u['email'], '.com'))
                     ? $u['email']
-                    : ($u['role'] === 'super_admin' ? $userPart : "{$userPart}@{$schoolSlug}");
+                    : (($u['role'] ?? '') === 'super_admin' ? $userPart : "{$userPart}@{$schoolSlug}");
 
                 return [
                     'id' => $u['id'],
@@ -121,10 +120,10 @@ class UserController
             $schoolId = $this->getTenantId();
 
             // Fetch school slug
-            $schoolStmt = $this->db->prepare("SELECT slug, subdomain FROM schools WHERE id = :id");
+            $schoolStmt = $this->db->prepare("SELECT * FROM schools WHERE id = :id");
             $schoolStmt->execute([':id' => $schoolId]);
             $school = $schoolStmt->fetch(PDO::FETCH_ASSOC);
-            $slug = $school['slug'] ?? $school['subdomain'] ?? 'nduundune';
+            $slug = $school['slug'] ?? $school['subdomain'] ?? (isset($school['name']) ? strtolower(explode(' ', $school['name'])[0]) : 'nduundune');
 
             // Clean username prefix and construct username@slug
             $cleanUser = strtolower(preg_replace('/[^a-zA-Z0-9_\.]/', '', explode('@', $usernameInput)[0]));
