@@ -108,13 +108,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case 'super_admin':
         return rawMenuItems;
       case 'school_admin':
+      case 'head_teacher':
         return rawMenuItems.filter((item) => item.id !== 'schools-directory');
       case 'bursar':
-        return rawMenuItems.filter((item) => item.id !== 'configurations' && item.id !== 'audit' && item.id !== 'schools-directory');
-      case 'head_teacher':
-        return rawMenuItems.filter((item) =>
-          ['dashboard', 'students', 'invoicing', 'expenses', 'staff', 'reports-center', 'messaging', 'audit'].includes(item.id)
-        );
+        return rawMenuItems.filter((item) => item.id !== 'schools-directory');
       case 'auditor':
         return rawMenuItems.filter((item) =>
           ['dashboard', 'collections', 'expenses', 'reconciliation', 'accounting', 'reports-center', 'audit'].includes(item.id)
