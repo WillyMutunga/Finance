@@ -15,7 +15,7 @@ class SchoolController
         $this->ensureSchema();
     }
 
-    public function ensureSchema(): void
+    public function ensureSchema(): array
     {
         $sqls = [
             "ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)",
@@ -41,13 +41,18 @@ class SchoolController
             "UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE (slug IS NULL OR slug = '') AND id = 'a0000000-0000-0000-0000-000000000001'",
             "UPDATE users SET school_id = 'a0000000-0000-0000-0000-000000000001' WHERE school_id IS NULL"
         ];
+        $errors = [];
         foreach ($sqls as $sql) {
             try {
                 $this->db->exec($sql);
             } catch (\Throwable $e) {
-                // Ignore fallback
+                $errors[] = [
+                    'query' => $sql,
+                    'error' => $e->getMessage()
+                ];
             }
         }
+        return $errors;
     }
 
     /**
@@ -112,6 +117,7 @@ class SchoolController
      */
     public function createSchool(): void
     {
+        $schemaErrors = $this->ensureSchema();
         try {
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
@@ -291,7 +297,11 @@ class SchoolController
                 $this->db->rollBack();
             }
             http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'Onboarding failed: ' . $e->getMessage()]);
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Onboarding failed: ' . $e->getMessage(),
+                'schema_errors' => $schemaErrors
+            ]);
         }
     }
 
