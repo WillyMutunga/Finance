@@ -311,4 +311,79 @@ class UserController
             echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
+
+    /**
+     * POST /users/profile or PUT /users/profile
+     * Update user profile: name, 2FA OTP email, phone, and optional password
+     */
+    public function updateProfile()
+    {
+        try {
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id = $input['id'] ?? null;
+            $name = trim($input['name'] ?? '');
+            $email = trim($input['email'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            $password = trim($input['password'] ?? '');
+
+            if (!$id) {
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'User ID is required.']);
+                return;
+            }
+
+            if (!empty($password)) {
+                $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+                $stmt = $this->db->prepare("
+                    UPDATE users SET
+                        name = COALESCE(NULLIF(:name, ''), name),
+                        email = COALESCE(NULLIF(:email, ''), email),
+                        phone = COALESCE(NULLIF(:phone, ''), phone),
+                        password_hash = :hash,
+                        updated_at = NOW()
+                    WHERE id = :id
+                    RETURNING id, name, email, phone, role, is_active
+                ");
+                $stmt->execute([
+                    ':name'  => $name,
+                    ':email' => $email,
+                    ':phone' => $phone,
+                    ':hash'  => $passwordHash,
+                    ':id'    => $id
+                ]);
+            } else {
+                $stmt = $this->db->prepare("
+                    UPDATE users SET
+                        name = COALESCE(NULLIF(:name, ''), name),
+                        email = COALESCE(NULLIF(:email, ''), email),
+                        phone = COALESCE(NULLIF(:phone, ''), phone),
+                        updated_at = NOW()
+                    WHERE id = :id
+                    RETURNING id, name, email, phone, role, is_active
+                ");
+                $stmt->execute([
+                    ':name'  => $name,
+                    ':email' => $email,
+                    ':phone' => $phone,
+                    ':id'    => $id
+                ]);
+            }
+
+            $updated = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$updated) {
+                http_response_code(404);
+                echo json_encode(['status' => 'error', 'message' => 'User not found.']);
+                return;
+            }
+
+            echo json_encode([
+                'status'  => 'success',
+                'message' => 'Profile updated successfully! 2FA OTP codes will be sent to ' . ($updated['email'] ?: 'your email address'),
+                'data'    => $updated
+            ]);
+        } catch (\Exception $e) {
+            http_response_code(500);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+    }
 }

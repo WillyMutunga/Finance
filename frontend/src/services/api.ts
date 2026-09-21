@@ -1303,12 +1303,27 @@ export class ApiService {
 
   static async createUser(data: {
     name: string;
-    username: string;
+    username?: string;
+    email?: string;
     password: string;
     phone?: string;
     role: string;
+    school_id?: string;
   }) {
     return this.request<{ status: string; message: string; data: any }>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  static async updateProfile(data: {
+    id: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+  }) {
+    return this.request<{ status: string; message: string; data: any }>('/users/profile', {
       method: 'POST',
       body: JSON.stringify(data)
     });

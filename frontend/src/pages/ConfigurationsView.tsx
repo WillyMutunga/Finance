@@ -280,7 +280,7 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
   const [userSearch, setUserSearch] = useState('');
   const [usersList, setUsersList] = useState<Array<{ id: number; addedOn: string; username: string; name: string; phone: string; email: string; role: string }>>([]);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [newUser, setNewUser] = useState({ name: '', username: '', phone: '', password: '', role: 'bursar' });
+  const [newUser, setNewUser] = useState({ name: '', username: '', email: '', phone: '', password: '', role: 'bursar' });
 
   // 5. Receipt Numbering (media_1788704302681.png & media_1788704726925.png)
   const [collectionReceiptType, setCollectionReceiptType] = useState<'common' | 'different'>('common');
@@ -1822,7 +1822,7 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
                   <button
                     type="button"
                     onClick={() => {
-                      setNewUser({ name: '', username: '', phone: '', password: '', role: 'bursar' });
+                      setNewUser({ name: '', username: '', email: '', phone: '', password: '', role: 'bursar' });
                       setShowAddUserModal(true);
                     }}
                     className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer self-start sm:self-auto"
@@ -2109,10 +2109,12 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
                           const schoolSlug = activeSchoolObj?.slug || schoolProfile?.slug || (schoolProfile?.name ? schoolProfile.name.split(' ')[0].toLowerCase() : 'nduundune');
                           const cleanUserHandle = newUser.username.trim();
                           const fullUsername = cleanUserHandle.includes('@') ? cleanUserHandle : `${cleanUserHandle}@${schoolSlug}`;
+                          const userEmail = newUser.email.trim() || fullUsername;
 
                           const res = await ApiService.createUser({
                             name: newUser.name.trim(),
                             username: fullUsername,
+                            email: userEmail,
                             password: newUser.password.trim(),
                             phone: newUser.phone.trim(),
                             role: newUser.role
@@ -2120,7 +2122,7 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
                           if (res && res.status === 'success') {
                             showNotification(res.message || 'User created successfully!');
                             setShowAddUserModal(false);
-                            setNewUser({ name: '', username: '', phone: '', password: '', role: 'bursar' });
+                            setNewUser({ name: '', username: '', email: '', phone: '', password: '', role: 'bursar' });
                             await loadUsersData();
                           } else {
                             alert(res?.message || 'Error creating user');
@@ -2186,6 +2188,23 @@ export const ConfigurationsView: React.FC<ConfigurationsViewProps> = ({ currentR
                               </div>
                             );
                           })()}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            2FA OTP Delivery Email Address *
+                          </label>
+                          <input
+                            type="email"
+                            required
+                            placeholder="e.g. user@gmail.com (for receiving 2FA OTP codes)"
+                            value={newUser.email}
+                            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-500"
+                          />
+                          <p className="text-[10px] text-emerald-700 font-medium mt-1">
+                            📬 Login 2FA verification codes (OTPs) will be emailed to this address.
+                          </p>
                         </div>
 
                         <div>

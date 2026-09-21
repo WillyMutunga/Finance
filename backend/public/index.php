@@ -730,7 +730,9 @@ try {
     }
 
     // 30. School User Management & Access Control
-    elseif ($uri === '/users' && $method === 'GET') {
+    elseif (($uri === '/users/profile' || $uri === '/auth/profile') && ($method === 'POST' || $method === 'PUT')) {
+        (new UserController())->updateProfile();
+    } elseif ($uri === '/users' && $method === 'GET') {
         (new UserController())->index();
     } elseif ($uri === '/users' && $method === 'POST') {
         (new UserController())->create();
