@@ -62,6 +62,20 @@ class SchoolController
     public function listSchools(): void
     {
         try {
+            // Check existing columns of schools and users
+            $colStmt = $this->db->query("
+                SELECT table_name, column_name, data_type, is_nullable 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name IN ('schools', 'users', 'vote_heads', 'academic_years', 'terms')
+                ORDER BY table_name, ordinal_position
+            ");
+            $columns = $colStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $grouped = [];
+            foreach ($columns as $c) {
+                $grouped[$c['table_name']][] = $c['column_name'] . ' (' . $c['data_type'] . ')';
+            }
+
             $stmt = $this->db->query("
                 SELECT s.*,
                        (SELECT COUNT(*) FROM students st WHERE st.school_id = s.id) AS student_count,
@@ -73,6 +87,7 @@ class SchoolController
 
             echo json_encode([
                 'status' => 'success',
+                'schema_columns' => $grouped,
                 'data' => $schools,
                 'total' => count($schools)
             ]);
