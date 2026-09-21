@@ -42,6 +42,7 @@ export function App() {
   const [schoolName, setSchoolName] = useState('NDUUNDUNE SECONDARY SCHOOL');
   const [schoolCode, setSchoolCode] = useState('NDU001');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   useEffect(() => {
     // Restore session if active
@@ -145,24 +146,35 @@ export function App() {
         onLogout={handleLogout}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        onNavigate={(tab) => setActiveTab(tab)}
+        isMobileMenuOpen={isMobileMenuOpen}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        onNavigate={(tab) => {
+          setActiveTab(tab);
+          setIsMobileMenuOpen(false);
+        }}
         onSwitchSchool={handleSwitchSchool}
       />
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        {/* Skysoft Collapsible Left Sidebar (hidden in dedicated parent mobile mode) */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        {/* Skysoft Collapsible Left Sidebar & Mobile Drawer */}
         {currentRole !== 'parent' ? (
           <Sidebar
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={(tab) => {
+              setActiveTab(tab);
+              setIsMobileMenuOpen(false);
+            }}
             currentRole={currentRole}
             unreconciledCount={unreconciledCount}
             isCollapsed={isSidebarCollapsed}
+            isMobileOpen={isMobileMenuOpen}
+            onCloseMobile={() => setIsMobileMenuOpen(false)}
+            schoolName={schoolName}
           />
         ) : null}
 
         {/* Main Workspace Area (Scrolls independently) */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto min-w-0 custom-scrollbar">
+        <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto min-w-0 custom-scrollbar w-full">
 
           {activeTab === 'schools-directory' && (
             <SchoolsManagementView

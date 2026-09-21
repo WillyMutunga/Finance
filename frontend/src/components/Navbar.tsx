@@ -11,6 +11,8 @@ interface NavbarProps {
   onLogout?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  isMobileMenuOpen?: boolean;
+  onToggleMobileMenu?: () => void;
   onNavigate?: (tab: string) => void;
   onSwitchSchool?: (schoolId: string, name: string) => void;
 }
@@ -23,6 +25,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   isSidebarCollapsed = false,
   onToggleSidebar,
+  isMobileMenuOpen = false,
+  onToggleMobileMenu,
   onNavigate,
   onSwitchSchool
 }) => {
@@ -89,14 +93,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentTenantId = ApiService.getTenantId();
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200/90 px-4 md:px-5 flex items-center justify-between sticky top-0 z-40 shadow-[0_1px_4px_rgba(0,0,0,0.03)] select-none flex-shrink-0">
+    <header className="h-16 bg-white border-b border-slate-200/90 px-3 sm:px-4 md:px-5 flex items-center justify-between sticky top-0 z-40 shadow-[0_1px_4px_rgba(0,0,0,0.03)] select-none flex-shrink-0">
       {/* Left: Sidebar Toggle + Skysoft Finance Brand + School Tenant Pill */}
-      <div className="flex items-center gap-3 sm:gap-4">
-        {/* Sidebar Collapse Toggle Button */}
+      <div className="flex items-center gap-2.5 sm:gap-4">
+        {/* Mobile Hamburger Drawer Toggle (Visible on < lg screens) */}
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors focus:outline-none lg:hidden"
+            title="Open Navigation Menu"
+            aria-label="Open Navigation Menu"
+          >
+            <Menu className="w-5 h-5 text-slate-700" />
+          </button>
+        )}
+
+        {/* Desktop Sidebar Collapse Toggle Button (Visible on >= lg screens) */}
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
-            className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus:outline-none"
+            className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors focus:outline-none"
             title={isSidebarCollapsed ? 'Expand Navigation Sidebar' : 'Collapse Navigation Sidebar'}
           >
             {isSidebarCollapsed ? (
@@ -108,9 +124,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* Brand Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-700 via-sky-600 to-emerald-500 flex items-center justify-center text-white font-black text-lg shadow-md shadow-sky-600/20">
-            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-sky-700 via-sky-600 to-emerald-500 flex items-center justify-center text-white font-black text-base sm:text-lg shadow-md shadow-sky-600/20">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
@@ -125,7 +141,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <div className="h-6 w-px bg-slate-200 hidden md:block" />
 
-        {/* Executive School Tenant Switcher */}
+        {/* Mobile Compact School Switcher Pill (Visible on < sm screens) */}
+        <div className="relative sm:hidden">
+          <button
+            onClick={handleToggleSchoolDropdown}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-bold text-slate-800 transition-colors ${
+              currentRole === 'super_admin' ? 'bg-slate-50 hover:bg-slate-100 border-slate-200' : 'bg-slate-50 border-slate-200'
+            }`}
+          >
+            <Building2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+            <span className="truncate max-w-[90px]">{schoolName.split(' ')[0]}</span>
+            {currentRole === 'super_admin' && <ChevronDown className="w-3 h-3 text-slate-400 flex-shrink-0" />}
+          </button>
+        </div>
+
+        {/* Executive School Tenant Switcher (Visible on sm+ screens) */}
         <div className="relative">
           <div
             onClick={handleToggleSchoolDropdown}
