@@ -968,57 +968,33 @@ export const AccountingView: React.FC<AccountingViewProps> = ({ initialSubTab = 
                           <td className={`py-4 px-5 text-right font-mono font-bold text-sm ${isNegative ? 'text-rose-600' : 'text-slate-900'}`}>
                             {formattedBal}
                           </td>
-                          <td className="py-4 px-5 text-center relative">
-                            <div className="relative inline-block text-left">
+                          <td className="py-4 px-5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveAccountActionId(activeAccountActionId === acc.id ? null : acc.id);
-                                }}
-                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 hover:text-slate-900 transition-colors"
+                                onClick={() => openEditAccount(acc)}
+                                className="px-2.5 py-1.5 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 rounded-lg transition-all flex items-center gap-1.5 font-bold text-xs border border-slate-200 hover:border-emerald-300 bg-white shadow-2xs"
+                                title="Edit Account Particulars"
                               >
-                                <MoreVertical className="w-4 h-4" />
+                                <Edit2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Edit</span>
                               </button>
-
-                              {activeAccountActionId === acc.id && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => setActiveAccountActionId(null)}
-                                  />
-                                  <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 text-xs font-semibold text-slate-700 animate-fadeIn">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditAccount(acc)}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>Edit Account</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveAccountActionId(null);
-                                        setActiveSubTab('general-ledger');
-                                      }}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-sky-50 hover:text-sky-700 flex items-center gap-2 transition-colors"
-                                    >
-                                      <Eye className="w-3.5 h-3.5 text-sky-600" />
-                                      <span>View Ledger</span>
-                                    </button>
-                                    <div className="border-t border-slate-100 my-1" />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteAccount(acc.id, acc.name)}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-rose-50 text-rose-600 flex items-center gap-2 transition-colors"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                      <span>Delete Account</span>
-                                    </button>
-                                  </div>
-                                </>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => setActiveSubTab('general-ledger')}
+                                className="p-1.5 hover:bg-sky-50 text-slate-500 hover:text-sky-700 rounded-lg transition-all border border-slate-200 hover:border-sky-300 bg-white shadow-2xs"
+                                title="View General Ledger"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-sky-600" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAccount(acc.id, acc.name)}
+                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-all border border-slate-200 hover:border-rose-300 bg-white shadow-2xs"
+                                title="Delete Account"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </td>
                         </tr>
