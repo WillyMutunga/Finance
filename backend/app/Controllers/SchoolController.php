@@ -175,7 +175,7 @@ class SchoolController
                     ':name'      => $vh['name'],
                     ':code'      => $vh['code'],
                     ':desc'      => $vh['desc'],
-                    ':is_opt'    => $vh['is_opt'] ? 1 : 0
+                    ':is_opt'    => $vh['is_opt'] ? 'true' : 'false'
                 ]);
             }
 
@@ -206,7 +206,7 @@ class SchoolController
                     ':name'       => $t['name'],
                     ':start_date' => $t['start_date'],
                     ':end_date'   => $t['end_date'],
-                    ':is_current' => $t['is_current'] ? 1 : 0
+                    ':is_current' => $t['is_current'] ? 'true' : 'false'
                 ]);
             }
 
