@@ -144,7 +144,7 @@ class AuthController
                     try {
                         $stmtSlug = $this->db->prepare("
                             SELECT * FROM schools 
-                            WHERE LOWER(slug) = :slug OR LOWER(subdomain) = :slug 
+                            WHERE LOWER(subdomain) = :slug 
                             LIMIT 1
                         ");
                         $stmtSlug->execute([':slug' => $possibleSlug]);
@@ -224,7 +224,7 @@ class AuthController
             if (!$user) {
                 // 3. Parent lookup with student admission number
                 $stmtStud = $this->db->prepare("
-                    SELECT s.*, sc.name as school_name, sc.id as school_id, sc.slug as school_slug,
+                    SELECT s.*, sc.name as school_name, sc.id as school_id, sc.subdomain as school_slug,
                            g.email as guardian_email, g.name as guardian_name
                     FROM students s
                     JOIN schools sc ON s.school_id = sc.id

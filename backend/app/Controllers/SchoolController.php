@@ -12,47 +12,6 @@ class SchoolController
     public function __construct()
     {
         $this->db = Database::getConnection();
-        $this->ensureSchema();
-    }
-
-    public function ensureSchema(): array
-    {
-        $sqls = [
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS slug VARCHAR(100)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS subdomain VARCHAR(100)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS code VARCHAR(100)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS motto VARCHAR(255)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS county VARCHAR(100)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS currency VARCHAR(20) DEFAULT 'KES'",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS mpesa_paybill VARCHAR(50)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS phone VARCHAR(50)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS address TEXT",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS sms_sender_id VARCHAR(50)",
-            "ALTER TABLE schools ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_school_admin BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
-            "ALTER TABLE vote_heads ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
-            "ALTER TABLE academic_years ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
-            "ALTER TABLE terms ADD COLUMN IF NOT EXISTS school_id VARCHAR(64)",
-            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key",
-            "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key",
-            "UPDATE schools SET slug = 'nduundune', subdomain = 'nduundune' WHERE (slug IS NULL OR slug = '') AND id = 'a0000000-0000-0000-0000-000000000001'",
-            "UPDATE users SET school_id = 'a0000000-0000-0000-0000-000000000001' WHERE school_id IS NULL"
-        ];
-        $errors = [];
-        foreach ($sqls as $sql) {
-            try {
-                $this->db->exec($sql);
-            } catch (\Throwable $e) {
-                $errors[] = [
-                    'query' => $sql,
-                    'error' => $e->getMessage()
-                ];
-            }
-        }
-        return $errors;
     }
 
     /**
@@ -62,22 +21,8 @@ class SchoolController
     public function listSchools(): void
     {
         try {
-            // Check existing columns of schools and users
-            $colStmt = $this->db->query("
-                SELECT table_name, column_name, data_type, is_nullable 
-                FROM information_schema.columns 
-                WHERE table_schema = 'public' AND table_name IN ('schools', 'users', 'vote_heads', 'academic_years', 'terms')
-                ORDER BY table_name, ordinal_position
-            ");
-            $columns = $colStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            $grouped = [];
-            foreach ($columns as $c) {
-                $grouped[$c['table_name']][] = $c['column_name'] . ' (' . $c['data_type'] . ')';
-            }
-
             $stmt = $this->db->query("
-                SELECT s.*,
+                SELECT s.*, s.subdomain AS slug,
                        (SELECT COUNT(*) FROM students st WHERE st.school_id = s.id) AS student_count,
                        (SELECT COUNT(*) FROM users u WHERE u.school_id = s.id) AS user_count
                 FROM schools s
@@ -87,7 +32,6 @@ class SchoolController
 
             echo json_encode([
                 'status' => 'success',
-                'schema_columns' => $grouped,
                 'data' => $schools,
                 'total' => count($schools)
             ]);
@@ -104,7 +48,7 @@ class SchoolController
     {
         try {
             $stmt = $this->db->prepare("
-                SELECT s.*,
+                SELECT s.*, s.subdomain AS slug,
                        (SELECT COUNT(*) FROM students st WHERE st.school_id = s.id) AS student_count,
                        (SELECT COUNT(*) FROM users u WHERE u.school_id = s.id) AS user_count
                 FROM schools s
@@ -132,7 +76,6 @@ class SchoolController
      */
     public function createSchool(): void
     {
-        $schemaErrors = $this->ensureSchema();
         try {
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
@@ -167,8 +110,8 @@ class SchoolController
             }
             $slug = strtolower(preg_replace('/[^a-z0-9\-]/', '', $rawSlug));
 
-            // Check if slug or name exists
-            $checkStmt = $this->db->prepare("SELECT id FROM schools WHERE LOWER(slug) = LOWER(:s) OR LOWER(subdomain) = LOWER(:s) OR LOWER(name) = LOWER(:n)");
+            // Check if subdomain or name exists
+            $checkStmt = $this->db->prepare("SELECT id FROM schools WHERE LOWER(subdomain) = LOWER(:s) OR LOWER(name) = LOWER(:n)");
             $checkStmt->execute([':s' => $slug, ':n' => $name]);
             if ($checkStmt->fetch()) {
                 http_response_code(400);
@@ -183,10 +126,10 @@ class SchoolController
             // 1. Insert School Record
             $stmt = $this->db->prepare("
                 INSERT INTO schools (
-                    id, name, slug, subdomain, code, motto, county, currency, mpesa_paybill,
+                    id, name, subdomain, code, motto, county, currency, mpesa_paybill,
                     email, phone, address, sms_sender_id, is_active, created_at, updated_at
                 ) VALUES (
-                    :id, :name, :slug, :subdomain, :code, :motto, :county, :currency, :paybill,
+                    :id, :name, :subdomain, :code, :motto, :county, :currency, :paybill,
                     :email, :phone, :address, :sender_id, true, NOW(), NOW()
                 )
             ");
@@ -194,7 +137,6 @@ class SchoolController
             $stmt->execute([
                 ':id'         => $schoolId,
                 ':name'       => $name,
-                ':slug'       => $slug,
                 ':subdomain'  => $slug,
                 ':code'       => $code ?: (string)rand(10000000, 99999999),
                 ':motto'      => $motto,
@@ -276,16 +218,15 @@ class SchoolController
             $adminId = $this->generateUUID();
             $userStmt = $this->db->prepare("
                 INSERT INTO users (
-                    id, school_id, name, username, email, phone, password_hash, role, is_school_admin, is_active, created_at, updated_at
+                    id, school_id, name, email, phone, password_hash, role, is_active, created_at, updated_at
                 ) VALUES (
-                    :id, :school_id, :name, :username, :email, :phone, :password_hash, 'head_teacher', true, true, NOW(), NOW()
+                    :id, :school_id, :name, :email, :phone, :password_hash, 'head_teacher', true, NOW(), NOW()
                 )
             ");
             $userStmt->execute([
                 ':id'            => $adminId,
                 ':school_id'     => $schoolId,
                 ':name'          => $adminName,
-                ':username'      => $cleanUserPart,
                 ':email'         => $fullUsername,
                 ':phone'         => $adminPhone,
                 ':password_hash' => $passwordHash
@@ -300,6 +241,7 @@ class SchoolController
                     'school_id'      => $schoolId,
                     'name'           => $name,
                     'slug'           => $slug,
+                    'subdomain'      => $slug,
                     'admin_username' => $fullUsername,
                     'admin_name'     => $adminName,
                     'admin_email'    => $adminEmail,
@@ -314,8 +256,7 @@ class SchoolController
             http_response_code(500);
             echo json_encode([
                 'status' => 'error',
-                'message' => 'Onboarding failed: ' . $e->getMessage(),
-                'schema_errors' => $schemaErrors
+                'message' => 'Onboarding failed: ' . $e->getMessage()
             ]);
         }
     }
