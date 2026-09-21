@@ -184,102 +184,111 @@ export const SchoolsManagementView: React.FC<SchoolsManagementViewProps> = ({ on
       )}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 uppercase tracking-wider mb-1">
-            <Sparkles className="w-4 h-4" /> Multi-Tenant Institutional Platform
+            <Sparkles className="w-4 h-4 flex-shrink-0" />
+            <span>Multi-Tenant Institutional Platform</span>
           </div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 flex-shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
-            School Directory & Onboarding Management
+            <span>School Directory & Onboarding Management</span>
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
             Onboard new schools, provision automated votehead charts, and manage institutional tenant accounts
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={loadSchools}
-            className="p-2.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 rounded-xl transition"
-            title="Refresh"
+            className="p-2.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200 rounded-xl transition cursor-pointer"
+            title="Refresh List"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
           </button>
           <button
             onClick={() => setShowOnboardModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition text-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 sm:px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition text-xs sm:text-sm cursor-pointer whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" /> Onboard New School
+            <Plus className="w-4 h-4 flex-shrink-0" />
+            <span>Onboard New School</span>
           </button>
         </div>
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Schools</div>
-            <div className="text-2xl font-black text-slate-800 mt-1">{schools.length}</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{schools.length}</div>
             <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">100% Active Tenants</div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-            <School className="w-6 h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold flex-shrink-0">
+            <School className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Enrolled Students</div>
-            <div className="text-2xl font-black text-slate-800 mt-1">{totalStudents.toLocaleString()}</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{totalStudents.toLocaleString()}</div>
             <div className="text-[11px] text-slate-400 mt-0.5">Across all institutions</div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
-            <GraduationCap className="w-6 h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold flex-shrink-0">
+            <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Staff Users</div>
-            <div className="text-2xl font-black text-slate-800 mt-1">{totalUsers}</div>
+            <div className="text-xl sm:text-2xl font-black text-slate-800 mt-1">{totalUsers}</div>
             <div className="text-[11px] text-slate-400 mt-0.5">Bursars, Admins, Auditors</div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
-            <Users className="w-6 h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold flex-shrink-0">
+            <Users className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Workspace</div>
-            <div className="text-sm font-black text-emerald-800 mt-1 truncate max-w-[150px]">
+            <div className="text-xs sm:text-sm font-black text-emerald-800 mt-1 truncate max-w-[140px]">
               {schools.find(s => s.id === currentTenantId)?.name || 'Nduundune Secondary'}
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
               @{schools.find(s => s.id === currentTenantId)?.slug || 'nduundune'}
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-6 h-6" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0">
+            <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-4">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex-1 relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search by school name, username slug (@slug), county, or Paybill number..."
-            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm font-medium"
+            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs sm:text-sm font-medium"
           />
         </div>
+        <button
+          onClick={() => setShowOnboardModal(true)}
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          <span>+ Onboard New School</span>
+        </button>
       </div>
 
       {/* Schools Directory Cards Grid */}
